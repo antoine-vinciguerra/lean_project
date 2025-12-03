@@ -1,1 +1,1 @@
-import LaplaceTransform.Basic
+import LaplaceTransform.LaplaceTransformDef
