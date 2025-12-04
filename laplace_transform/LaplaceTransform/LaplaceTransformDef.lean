@@ -91,4 +91,24 @@ theorem LaplaceTransform_const_smul
   _=  r • laplaceTransform L f μ s := by rw [laplaceTransform]
 
 
+theorem LaplaceTransform_additive
+  (L : E → ℂ → E) (f₁ : E → E)(f₂: E → E) (μ : Measure E) (s : ℂ)
+  (h_int₁ : Integrable (fullLaplaceKernel L f₁ s ) μ)
+  (h_int₂ : Integrable (fullLaplaceKernel L f₂ s ) μ):
+  laplaceTransform L (f₁ + f₂) μ s =  laplaceTransform L f₁ μ s + laplaceTransform L f₂ μ s := by
+  calc
+  laplaceTransform L (f₁ + f₂) μ s=∫ (e : E), fullLaplaceKernel L (f₁ + f₂) s e ∂μ:= by
+    rw [laplaceTransform]
+  _=∫ (e : E),  ((f₁+f₂) e * (laplaceKernel L e s )• (1 : E)) ∂μ := by
+    simp_rw [fullLaplaceKernel]
+  _=∫ (e : E),  ((f₁ e +f₂ e) * (laplaceKernel L e s )• (1 : E)) ∂μ:= by
+    simp_all only [Pi.add_apply,smul_eq_mul, mul_one]
+  _= ∫ (e : E),  (f₁ e  * (laplaceKernel L e s )• (1 : E) +f₂ e * (laplaceKernel L e s )• (1 : E)) ∂μ:= by
+    simp_rw [add_mul]
+  _= ∫ (e : E),  (f₁ e  * (laplaceKernel L e s )• (1 : E))∂μ +∫ (e : E),(f₂ e * (laplaceKernel L e s )• (1 : E)) ∂μ:= by
+    exact integral_add h_int₁ h_int₂
+  _=∫ (e : E), fullLaplaceKernel L f₁ s e ∂μ + ∫ (e : E), fullLaplaceKernel L f₂ s e ∂μ:= by simp_rw[fullLaplaceKernel]
+  _= laplaceTransform L f₁ μ s + laplaceTransform L f₂ μ s := by
+    simp_rw [laplaceTransform]
+
 end Defs
