@@ -22,12 +22,8 @@ import Mathlib.Algebra.Group.Commute.Defs
 /-!
 
 
-# The Laplace transform
+# The Generalized Version of the Laplace transform
 
-
-## Design choices
-
-## Main results
 -/
 
 @[expose] public section
@@ -42,15 +38,15 @@ open scoped Topology
 
 /-! ## Most General version of Laplace transform -/
 
+section Defs
 
-variable {𝕜 : Type*} [NontriviallyNormedField 𝕜] [CompleteSpace 𝕜]
+
 variable {E : Type*} [NormedRing E] [CompleteSpace E]
 [NormedSpace ℂ E][NormedAlgebra ℂ E][MeasurableSpace E]
 [IsBoundedSMul ℂ E] [NormedSpace ℝ E] [SMulCommClass ℝ ℂ E]
 
--- 𝕜 is a normed field which has an exponential defined,
 -- E is a ℂ-normed vector space
-section Defs
+
 /-- the next function defines the kernel of the Laplace transform-/
 def laplaceKernel (L : E → ℂ → E) (e : E) (s : ℂ) : E :=
   NormedSpace.exp ℂ (- (L e s))
@@ -139,7 +135,7 @@ theorem GeneralizedLaplaceTransform_additive
   (L : E → ℂ → E) (f₁ : E → E)(f₂: E → E) (μ : Measure E) (s : ℂ)
   (h_int₁ : Integrable (fullLaplaceKernel L f₁ s ) μ)
   (h_int₂ : Integrable (fullLaplaceKernel L f₂ s ) μ):
-  GeneralizedLaplaceTransform L (f₁ + f₂) μ s =  GeneralizedLaplaceTransform L f₁ μ s + laplaceTransform L f₂ μ s := by
+  GeneralizedLaplaceTransform L (f₁ + f₂) μ s =  GeneralizedLaplaceTransform L f₁ μ s + GeneralizedLaplaceTransform L f₂ μ s := by
   calc
   GeneralizedLaplaceTransform L (f₁ + f₂) μ s=∫ (e : E), fullLaplaceKernel L (f₁ + f₂) s e ∂μ:= by
     rw [GeneralizedLaplaceTransform]
