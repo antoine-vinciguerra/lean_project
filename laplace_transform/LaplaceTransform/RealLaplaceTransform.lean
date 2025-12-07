@@ -92,10 +92,28 @@ theorem RealLaplaceTransform_const_smul
 
 
 theorem RealLaplaceTransform_additive
-   (f₁ : ℝ → ℂ)(f₂: ℝ → ℂ) (s : ℂ)
-  (h_int₁ : Integrable (RealFullLaplaceKernel f₁ s))
-  (h_int₂ : Integrable (RealFullLaplaceKernel f₂ s)):
-  RealLaplaceTransform (f₁ + f₂) s =  RealLaplaceTransform f₁ s + RealLaplaceTransform f₂ s := by
-  sorry
-
+   (f₁ : ℝ → ℂ)(f₂: ℝ → ℂ) (p : ℂ)
+  (h_int₁ : Integrable (RealFullLaplaceKernel f₁ p) μ_c)
+  (h_int₂ : Integrable (RealFullLaplaceKernel f₂ p) μ_c):
+  RealLaplaceTransform (f₁ + f₂) p =  RealLaplaceTransform f₁ p + RealLaplaceTransform f₂ p := by
+  unfold RealLaplaceTransform
+  let f_tilde₁ (z : ℂ) : ℂ :=
+      if z.im = 0 then f₁ z.re else 0
+  let f_tilde₂ (z : ℂ) : ℂ :=
+      if z.im = 0 then f₂ z.re else 0
+  have f_tilde_linear: (fun z ↦ if z.im = 0 then (f₁ + f₂) z.re else 0)= f_tilde₁+ f_tilde₂:= by
+    ext z
+    simp only [Pi.add_apply]
+    unfold f_tilde₁ f_tilde₂
+    split
+    next h => simp_all only
+    next h => simp_all only [add_zero]
+  rw[f_tilde_linear]
+  have h_integrable₁: Integrable (fullLaplaceKernel L f_tilde₁ p) μ_c:= by
+    simp_all only [Pi.add_apply, f_tilde₁, f_tilde₂]
+    exact h_int₁
+  have h_integrable₂: Integrable (fullLaplaceKernel L f_tilde₂ p) μ_c:= by
+    simp_all only [Pi.add_apply, f_tilde₁, f_tilde₂]
+    exact h_int₂
+  apply GeneralizedLaplaceTransform_additive L f_tilde₁ f_tilde₂ μ_c p h_integrable₁ h_integrable₂
 end Defs
