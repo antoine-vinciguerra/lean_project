@@ -18,7 +18,7 @@ import Mathlib.Algebra.Group.Basic
 import Mathlib.Algebra.Group.Semiconj.Defs
 import Mathlib.Algebra.Group.Commute.Basic
 import Mathlib.Algebra.Group.Commute.Defs
-
+import Mathlib.Data.List.Defs
 /-!
 
 
