@@ -22,6 +22,7 @@ import Mathlib.Algebra.Group.Commute.Basic
 import Mathlib.Algebra.Group.Commute.Defs
 import LaplaceTransform.LaplaceTransformDef
 import Mathlib.MeasureTheory.Measure.Complex
+import Mathlib.Analysis.Complex.Exponential
 
 import Mathlib.Data.Complex.Basic
 import Mathlib.Data.List.Defs
@@ -48,7 +49,6 @@ open Complex
 
 section Defs
 -- Define the function L
-
 def L (z₁ z₂:ℂ ) :  ℂ:=
   z₁ * z₂
 -- Define the set [0, ∞)
@@ -56,12 +56,17 @@ def non_negative_reals : Set ℝ := Ici 0
 
 -- Define the measure on [0, ∞) as the Lebesgue measure restricted to that set
 def μ : Measure ℝ := volume.restrict non_negative_reals
-def μ_c : Measure  ℂ:= μ.map (↑)
+
+-- Now define the same for the right hand halfplane of the complex
+def half_plane_pos_re : Set ℂ :=
+  {z : ℂ | 0 < Complex.re z}
+
+def μ_c: Measure ℂ := volume.restrict half_plane_pos_re
 -- The Laplace Transform of a function f: ℝ → ℂ.
 
 def RealFullLaplaceKernel (f :ℝ → ℂ) (s : ℂ) : ℂ→ ℂ :=
   let f_tilde (z : ℂ) : ℂ :=
-      if z.im = 0 then f z.re else 0
+    (Complex.exp (-z.im)^2) *f z.re / (Real.sqrt Real.pi)
   fullLaplaceKernel L f_tilde s
 
 
@@ -84,6 +89,7 @@ theorem RealLaplaceTransform_const_smul
   rw[h_rf_tilde]
   have h_integrable: Integrable (fullLaplaceKernel L f_tilde p) μ_c:= by
     simp_all only [Pi.smul_apply, smul_eq_mul, f_tilde]
+
     exact h_int
   apply GeneralizedLaplaceTransform_const_smul L f_tilde μ_c r p h_integrable
   apply (inferInstance : CompleteSpace ℂ)
