@@ -117,6 +117,65 @@ theorem RealLaplaceTransform_additive
     exact h_int₂
   apply GeneralizedLaplaceTransform_additive L f_tilde₁ f_tilde₂ μ_c p h_integrable₁ h_integrable₂
 
+
+theorem RealLaplaceTransformIs
+   (f: ℝ → ℂ) (p: ℂ):
+  RealLaplaceTransform f p = ∫t, NormedSpace.exp ℂ (-p*t) * (f t) ∂μ  := by
+  let f_tilde (z : ℂ) : ℂ :=
+      if z.im = 0 then f z.re else 0
+  unfold RealLaplaceTransform
+  unfold L
+  unfold GeneralizedLaplaceTransform
+  unfold fullLaplaceKernel
+  unfold laplaceKernel
+  simp_all only [smul_eq_mul, mul_one, ite_mul, zero_mul, neg_mul]
+
+
+
+def g (t : ℝ) : ℂ := 1
+
+theorem iszero
+  (s: ℂ): RealLaplaceTransform g s = 0 := by
+  unfold RealLaplaceTransform
+  unfold L
+  unfold GeneralizedLaplaceTransform
+  unfold fullLaplaceKernel
+  unfold laplaceKernel
+  unfold g
+  simp_all only [smul_eq_mul, mul_one, ite_mul, zero_mul, neg_mul]
+  simp_all only [one_mul]
+  apply integral_eq_zero_of_ae
+  rw [Filter.EventuallyEq, ae_iff]
+  simp_all only [Pi.zero_apply, ite_eq_right_iff, Classical.not_imp]
+  sorry
+
+
+-- We show that that the definition of the laplace transform is as expected
+def g_1 (t : ℝ) : ℂ := 1
+def ExpectedLaplaceTransform (f : ℝ → ℂ) (p : ℂ) : ℂ := ∫t, NormedSpace.exp ℂ (-p*t) * (f t) ∂μ
+theorem LaplaceTransformAppliedToOne
+   (s: ℂ) (h: 0 < s.re): ExpectedLaplaceTransform g_1 s = 1/s := by
+   unfold ExpectedLaplaceTransform
+   calc ExpectedLaplaceTransform g_1 s
+    = lim (atTop.map (fun T => ∫ t in Ioc 0 T, Complex.exp (-s * ↑t) * g_1 t ∂μ)) := by
+    sorry
+
+
+-- We now now apply prove the left-hand side of the table of Laplace transforms
+
+-- We define the function f(x) = 1
+
+def f (t : ℝ) : ℂ := 1
+-- We apply the Laplace transform to f
+theorem LaplaceTransformAppliedToOne
+   (s: ℂ) (h: 0 < s.re): RealLaplaceTransform f s = 1/s := by
+   unfold RealLaplaceTransform
+   let f_tilde (z : ℂ) : ℂ :=
+      if z.im = 0 then f z.re else 0
+   calc GeneralizedLaplaceTransform L (fun z ↦ if z.im = 0 then f z.re else 0) μ_c s = ∫t, NormedSpace.exp ℂ (-s*(t : ℂ)) * (f_tilde t) ∂μ_c := by
+    rw[GeneralizedLaplaceTransform]
+  sorry
+
 end Defs
 
 section LaplaceTable
@@ -136,6 +195,8 @@ structure LaplacePair where
   original_function : ℝ → ℂ
   laplace_transform : ℂ → ℂ
   convergence_set: Set ℂ
+
+
 
 
 namespace LaplaceDB
