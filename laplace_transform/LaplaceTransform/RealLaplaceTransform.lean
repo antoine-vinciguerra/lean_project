@@ -72,7 +72,7 @@ def RealFullLaplaceKernel (f :ℝ → ℂ) (s : ℂ) : ℂ→ ℂ :=
 
 def RealLaplaceTransform (f :ℝ → ℂ) : ℂ → ℂ  :=
   let f_tilde (z : ℂ) : ℂ :=
-      if z.im = 0 then f z.re else 0
+    (Complex.exp (-z.im)^2) *f z.re / (Real.sqrt Real.pi)
   GeneralizedLaplaceTransform L f_tilde μ_c
 
 theorem RealLaplaceTransform_const_smul
@@ -81,15 +81,24 @@ theorem RealLaplaceTransform_const_smul
   RealLaplaceTransform  (r • f) p = r • RealLaplaceTransform f p := by
   unfold RealLaplaceTransform
   let f_tilde (z : ℂ) : ℂ :=
-      if z.im = 0 then f z.re else 0
-  have h_rf_tilde: (fun z ↦ if z.im = 0 then (r • f) z.re else 0)= r •f_tilde:= by
-    simp_all only [Pi.smul_apply, smul_eq_mul, f_tilde]
-    ext x : 1
-    simp_all only [Pi.smul_apply, smul_eq_mul, mul_ite, mul_zero]
+    (Complex.exp (-z.im)^2) *f z.re / (Real.sqrt Real.pi)
+  have h_rf_tilde:
+  (fun z ↦ Complex.exp (-z.im) ^ 2 * (r • f) z.re
+    / Real.sqrt Real.pi)= r •f_tilde:= by
+    ext x
+    simp[f_tilde]
+    have h_rf_tilde_x:
+    cexp (-↑x.im) ^ 2 * (r * f x.re) / ↑√Real.pi = r * (cexp (-↑x.im) ^ 2 * f x.re / ↑√Real.pi)
+    := by calc
+    cexp (-↑x.im) ^ 2 * (r • f) x.re / ↑√Real.pi=  r •(cexp (-↑x.im) ^ 2 *f x.re/ ↑√Real.pi):= by
+      simp only [Pi.smul_apply, smul_eq_mul]
+
+
+    _= (r • f_tilde) x:= by rw [@Pi.smul_apply]
+
   rw[h_rf_tilde]
   have h_integrable: Integrable (fullLaplaceKernel L f_tilde p) μ_c:= by
     simp_all only [Pi.smul_apply, smul_eq_mul, f_tilde]
-
     exact h_int
   apply GeneralizedLaplaceTransform_const_smul L f_tilde μ_c r p h_integrable
   apply (inferInstance : CompleteSpace ℂ)
