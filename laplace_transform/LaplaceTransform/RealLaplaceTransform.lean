@@ -66,13 +66,13 @@ def μ_c: Measure ℂ := volume.restrict half_plane_pos_re
 
 def RealFullLaplaceKernel (f :ℝ → ℂ) (s : ℂ) : ℂ→ ℂ :=
   let f_tilde (z : ℂ) : ℂ :=
-    (Complex.exp (-z.im)^2) *f z.re / (Real.sqrt Real.pi)
+    (Complex.exp ((-z.im)^2)) *f z.re / (Real.sqrt Real.pi)
   fullLaplaceKernel L f_tilde s
 
 
 def RealLaplaceTransform (f :ℝ → ℂ) : ℂ → ℂ  :=
   let f_tilde (z : ℂ) : ℂ :=
-    (Complex.exp (-z.im)^2) *f z.re / (Real.sqrt Real.pi)
+    (Complex.exp ((-z.im)^2)) *f z.re / (Real.sqrt Real.pi)
   GeneralizedLaplaceTransform L f_tilde μ_c
 
 theorem RealLaplaceTransform_const_smul
@@ -81,21 +81,21 @@ theorem RealLaplaceTransform_const_smul
   RealLaplaceTransform  (r • f) p = r • RealLaplaceTransform f p := by
   unfold RealLaplaceTransform
   let f_tilde (z : ℂ) : ℂ :=
-    (Complex.exp (-z.im)^2) *f z.re / (Real.sqrt Real.pi)
+    (Complex.exp ((-z.im)^2)) *f z.re / (Real.sqrt Real.pi)
   have h_rf_tilde:
-  (fun z ↦ Complex.exp (-z.im) ^ 2 * (r • f) z.re
+  (fun z ↦ (Complex.exp ((-z.im)^2)) *( (r • f) z.re)
     / Real.sqrt Real.pi)= r •f_tilde:= by
-    ext x
-    simp[f_tilde]
-    have h_rf_tilde_x:
-    cexp (-↑x.im) ^ 2 * (r * f x.re) / ↑√Real.pi = r * (cexp (-↑x.im) ^ 2 * f x.re / ↑√Real.pi)
-    := by calc
-    cexp (-↑x.im) ^ 2 * (r • f) x.re / ↑√Real.pi=  r •(cexp (-↑x.im) ^ 2 *f x.re/ ↑√Real.pi):= by
-      simp only [Pi.smul_apply, smul_eq_mul]
-
-
-    _= (r • f_tilde) x:= by rw [@Pi.smul_apply]
-
+      ext z
+      simp[f_tilde]
+      have h_rf_tilde_z:
+      cexp (↑z.im ^ 2) * (r * f z.re) / ↑√Real.pi
+      = r * (cexp (↑z.im ^ 2) * f z.re / ↑√Real.pi):= by calc
+        cexp (↑z.im ^ 2) * (r * f z.re) / ↑√Real.pi=
+        (cexp (↑z.im ^ 2) * r * f z.re) / ↑√Real.pi:= by rw [@NonUnitalRing.mul_assoc]
+        _=(r* cexp (↑z.im ^ 2) * f z.re) / ↑√Real.pi:= by rw [mul_comm (cexp (↑z.im ^ 2)) r]
+        _=r* (cexp (↑z.im ^ 2) * f z.re) / ↑√Real.pi:= by rw [@NonUnitalRing.mul_assoc]
+        _=r * (cexp (↑z.im ^ 2) * f z.re / ↑√Real.pi):= by rw [@mul_div_assoc]
+      rw[h_rf_tilde_z]
   rw[h_rf_tilde]
   have h_integrable: Integrable (fullLaplaceKernel L f_tilde p) μ_c:= by
     simp_all only [Pi.smul_apply, smul_eq_mul, f_tilde]
@@ -113,16 +113,28 @@ theorem RealLaplaceTransform_additive
   RealLaplaceTransform (f₁ + f₂) p =  RealLaplaceTransform f₁ p + RealLaplaceTransform f₂ p := by
   unfold RealLaplaceTransform
   let f_tilde₁ (z : ℂ) : ℂ :=
-      if z.im = 0 then f₁ z.re else 0
+    (Complex.exp ((-z.im)^2)) *f₁ z.re / (Real.sqrt Real.pi)
   let f_tilde₂ (z : ℂ) : ℂ :=
-      if z.im = 0 then f₂ z.re else 0
-  have f_tilde_linear: (fun z ↦ if z.im = 0 then (f₁ + f₂) z.re else 0)= f_tilde₁+ f_tilde₂:= by
+    (Complex.exp ((-z.im)^2)) *f₂ z.re / (Real.sqrt Real.pi)
+
+  have f_tilde_linear: (fun z ↦ cexp ((-↑z.im) ^ 2) * (f₁ + f₂) z.re / ↑√Real.pi)= f_tilde₁+ f_tilde₂:= by
     ext z
-    simp only [Pi.add_apply]
-    unfold f_tilde₁ f_tilde₂
-    split
-    next h => simp_all only
-    next h => simp_all only [add_zero]
+    simp[f_tilde₁, f_tilde₂]
+    have  f_tilde_linear_z:
+    cexp (↑z.im ^ 2) * (f₁ z.re + f₂ z.re) / ↑√Real.pi =
+  cexp (↑z.im ^ 2) * f₁ z.re / ↑√Real.pi
+  + cexp (↑z.im ^ 2) * f₂ z.re / ↑√Real.pi := by calc
+    cexp (↑z.im ^ 2) * (f₁ z.re + f₂ z.re) / ↑√Real.pi=
+    (cexp (↑z.im ^ 2) * (f₁ z.re + f₂ z.re)) / ↑√Real.pi:= by rw [div_ofReal]
+      _= (cexp (↑z.im ^ 2) * f₁ z.re + cexp (↑z.im ^ 2) * f₂ z.re) / ↑√Real.pi:= by rw [@left_distrib]
+      _= (cexp (↑z.im ^ 2) * f₁ z.re + cexp (↑z.im ^ 2) * f₂ z.re) *(1/ ↑√Real.pi):= by rw [@mul_one_div]
+      _= (cexp (↑z.im ^ 2) * f₁ z.re )*(1/ ↑√Real.pi)+ ( cexp (↑z.im ^ 2) * f₂ z.re) *(1/ ↑√Real.pi):= by rw [@NonUnitalNonAssocRing.right_distrib]
+      _= (cexp (↑z.im ^ 2) * f₁ z.re )/↑√Real.pi+  (cexp (↑z.im ^ 2) * f₂ z.re)*(1/ ↑√Real.pi):= by
+        congr 1
+        rw [@mul_one_div]
+      _= (cexp (↑z.im ^ 2) * f₁ z.re )/↑√Real.pi+  (cexp (↑z.im ^ 2) * f₂ z.re)/↑√Real.pi:= by
+        rw [@mul_one_div]
+    rw[f_tilde_linear_z]
   rw[f_tilde_linear]
   have h_integrable₁: Integrable (fullLaplaceKernel L f_tilde₁ p) μ_c:= by
     simp_all only [Pi.add_apply, f_tilde₁, f_tilde₂]
