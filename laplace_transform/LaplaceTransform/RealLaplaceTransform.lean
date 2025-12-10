@@ -10,6 +10,8 @@ import Mathlib.MeasureTheory.Integral.Lebesgue.Countable
 import Mathlib.Dynamics.Ergodic.MeasurePreserving
 import Mathlib.MeasureTheory.Integral.Lebesgue.Basic
 import Mathlib.MeasureTheory.Integral.Lebesgue.Norm
+import Mathlib.MeasureTheory.Measure.Lebesgue.Complex
+import Mathlib.MeasureTheory.Integral.Prod
 
 import Mathlib.Topology.Instances.Complex
 import Mathlib.Analysis.SpecialFunctions.Exponential
@@ -26,7 +28,6 @@ import Mathlib.Analysis.Complex.Exponential
 
 import Mathlib.Data.Complex.Basic
 import Mathlib.Data.List.Defs
-
 
 
 /-!
@@ -49,52 +50,56 @@ open Complex
 
 section Defs
 -- Define the function L
-def L (z₁ z₂:ℂ ) :  ℂ:=
-  z₁ * z₂
+def realLine : Set ℂ := {z : ℂ | z.im = 0}
+def realLine_to_real (z : realLine) : ℝ :=
+  z.val.re
+
+--functions to go from R to our realLine
+def real_to_realLine (x : ℝ) : realLine :=
+  ⟨(x : ℂ), show ((x : ℂ).im = 0) from by simp⟩
+
+def L (x: realLine)  (z:ℂ ) :  ℂ:=
+  x * z
+
 -- Define the set [0, ∞)
-def non_negative_reals : Set ℝ := Ici 0
+
+def nonNegativeRealLine : Set realLine :=
+  {z : realLine | z.val.re ≥ 0}
 
 -- Define the measure on [0, ∞) as the Lebesgue measure restricted to that set
-def μ : Measure ℝ := volume.restrict non_negative_reals
+def μ_r : Measure realLine :=
+  (Measure.comap Subtype.val volume).restrict nonNegativeRealLine
 
 -- Now define the same for the right hand halfplane of the complex
-def half_plane_pos_re : Set ℂ :=
-  {z : ℂ | 0 < Complex.re z}
 
-def μ_c: Measure ℂ := volume.restrict half_plane_pos_re
--- The Laplace Transform of a function f: ℝ → ℂ.
-
-def RealFullLaplaceKernel (f :ℝ → ℂ) (s : ℂ) : ℂ→ ℂ :=
-  let f_tilde (z : ℂ) : ℂ :=
-    (Complex.exp ((-z.im)^2)) *f z.re / (Real.sqrt Real.pi)
-  fullLaplaceKernel L f_tilde s
+def RealFullLaplaceKernel (f :realLine → ℂ) (p : ℂ) : realLine→ ℂ :=
+  fun x ↦(fullLaplaceKernel realLine L f p) x
 
 
-def RealLaplaceTransform (f :ℝ → ℂ) : ℂ → ℂ  :=
-  let f_tilde (z : ℂ) : ℂ :=
-    (Complex.exp ((-z.im)^2)) *f z.re / (Real.sqrt Real.pi)
-  GeneralizedLaplaceTransform L f_tilde μ_c
+def RealLaplaceTransform (f :ℝ  → ℂ) : ℂ → ℂ  :=
+  let g (x : realLine): ℂ:= f (realLine_to_real x)
+  GeneralizedLaplaceTransform realLine L g μ_r
 
 theorem RealLaplaceTransform_const_smul
-   (f :ℝ → ℂ)  (r p : ℂ)
-   (h_int : Integrable (RealFullLaplaceKernel f p ) μ_c) :
+   (f :realLine → ℂ)  (r p : ℂ)
+   (h_int : Integrable (RealFullLaplaceKernel f p ) μ_r) :
   RealLaplaceTransform  (r • f) p = r • RealLaplaceTransform f p := by
   unfold RealLaplaceTransform
   let f_tilde (z : ℂ) : ℂ :=
-    (Complex.exp ((-z.im)^2)) *f z.re / (Real.sqrt Real.pi)
+    (Complex.exp (-z.im^2)) *f z.re / (Real.sqrt Real.pi)
   have h_rf_tilde:
-  (fun z ↦ (Complex.exp ((-z.im)^2)) *( (r • f) z.re)
+  (fun z ↦ (Complex.exp (-z.im^2)) *( (r • f) z.re)
     / Real.sqrt Real.pi)= r •f_tilde:= by
       ext z
       simp[f_tilde]
       have h_rf_tilde_z:
-      cexp (↑z.im ^ 2) * (r * f z.re) / ↑√Real.pi
-      = r * (cexp (↑z.im ^ 2) * f z.re / ↑√Real.pi):= by calc
-        cexp (↑z.im ^ 2) * (r * f z.re) / ↑√Real.pi=
-        (cexp (↑z.im ^ 2) * r * f z.re) / ↑√Real.pi:= by rw [@NonUnitalRing.mul_assoc]
-        _=(r* cexp (↑z.im ^ 2) * f z.re) / ↑√Real.pi:= by rw [mul_comm (cexp (↑z.im ^ 2)) r]
-        _=r* (cexp (↑z.im ^ 2) * f z.re) / ↑√Real.pi:= by rw [@NonUnitalRing.mul_assoc]
-        _=r * (cexp (↑z.im ^ 2) * f z.re / ↑√Real.pi):= by rw [@mul_div_assoc]
+      cexp (-↑z.im ^ 2) * (r * f z.re) / ↑√Real.pi
+      = r * (cexp (-↑z.im ^ 2) * f z.re / ↑√Real.pi):= by calc
+        cexp (-↑z.im ^ 2) * (r * f z.re) / ↑√Real.pi=
+        (cexp (-↑z.im ^ 2) * r * f z.re) / ↑√Real.pi:= by rw [@NonUnitalRing.mul_assoc]
+        _=(r* cexp (-↑z.im ^ 2) * f z.re) / ↑√Real.pi:= by rw [mul_comm (cexp (-↑z.im ^ 2)) r]
+        _=r* (cexp (-↑z.im ^ 2) * f z.re) / ↑√Real.pi:= by rw [@NonUnitalRing.mul_assoc]
+        _=r * (cexp (-↑z.im ^ 2) * f z.re / ↑√Real.pi):= by rw [@mul_div_assoc]
       rw[h_rf_tilde_z]
   rw[h_rf_tilde]
   have h_integrable: Integrable (fullLaplaceKernel L f_tilde p) μ_c:= by
@@ -113,26 +118,26 @@ theorem RealLaplaceTransform_additive
   RealLaplaceTransform (f₁ + f₂) p =  RealLaplaceTransform f₁ p + RealLaplaceTransform f₂ p := by
   unfold RealLaplaceTransform
   let f_tilde₁ (z : ℂ) : ℂ :=
-    (Complex.exp ((-z.im)^2)) *f₁ z.re / (Real.sqrt Real.pi)
+    (Complex.exp (-z.im^2)) *f₁ z.re / (Real.sqrt Real.pi)
   let f_tilde₂ (z : ℂ) : ℂ :=
-    (Complex.exp ((-z.im)^2)) *f₂ z.re / (Real.sqrt Real.pi)
+    (Complex.exp (-z.im^2)) *f₂ z.re / (Real.sqrt Real.pi)
 
-  have f_tilde_linear: (fun z ↦ cexp ((-↑z.im) ^ 2) * (f₁ + f₂) z.re / ↑√Real.pi)= f_tilde₁+ f_tilde₂:= by
+  have f_tilde_linear: (fun z ↦ cexp (-↑z.im ^ 2) * (f₁ + f₂) z.re / ↑√Real.pi)= f_tilde₁+ f_tilde₂:= by
     ext z
     simp[f_tilde₁, f_tilde₂]
     have  f_tilde_linear_z:
-    cexp (↑z.im ^ 2) * (f₁ z.re + f₂ z.re) / ↑√Real.pi =
-  cexp (↑z.im ^ 2) * f₁ z.re / ↑√Real.pi
-  + cexp (↑z.im ^ 2) * f₂ z.re / ↑√Real.pi := by calc
-    cexp (↑z.im ^ 2) * (f₁ z.re + f₂ z.re) / ↑√Real.pi=
-    (cexp (↑z.im ^ 2) * (f₁ z.re + f₂ z.re)) / ↑√Real.pi:= by rw [div_ofReal]
-      _= (cexp (↑z.im ^ 2) * f₁ z.re + cexp (↑z.im ^ 2) * f₂ z.re) / ↑√Real.pi:= by rw [@left_distrib]
-      _= (cexp (↑z.im ^ 2) * f₁ z.re + cexp (↑z.im ^ 2) * f₂ z.re) *(1/ ↑√Real.pi):= by rw [@mul_one_div]
-      _= (cexp (↑z.im ^ 2) * f₁ z.re )*(1/ ↑√Real.pi)+ ( cexp (↑z.im ^ 2) * f₂ z.re) *(1/ ↑√Real.pi):= by rw [@NonUnitalNonAssocRing.right_distrib]
-      _= (cexp (↑z.im ^ 2) * f₁ z.re )/↑√Real.pi+  (cexp (↑z.im ^ 2) * f₂ z.re)*(1/ ↑√Real.pi):= by
+    cexp (-↑z.im ^ 2) * (f₁ z.re + f₂ z.re) / ↑√Real.pi =
+  cexp (-↑z.im ^ 2) * f₁ z.re / ↑√Real.pi
+  + cexp (-↑z.im ^ 2) * f₂ z.re / ↑√Real.pi := by calc
+    cexp (-↑z.im ^ 2) * (f₁ z.re + f₂ z.re) / ↑√Real.pi=
+    (cexp (-↑z.im ^ 2) * (f₁ z.re + f₂ z.re)) / ↑√Real.pi:= by rw [div_ofReal]
+      _= (cexp (-↑z.im ^ 2) * f₁ z.re + cexp (-↑z.im ^ 2) * f₂ z.re) / ↑√Real.pi:= by rw [@left_distrib]
+      _= (cexp (-↑z.im ^ 2) * f₁ z.re + cexp (-↑z.im ^ 2) * f₂ z.re) *(1/ ↑√Real.pi):= by rw [@mul_one_div]
+      _= (cexp (-↑z.im ^ 2) * f₁ z.re )*(1/ ↑√Real.pi)+ ( cexp (-↑z.im ^ 2) * f₂ z.re) *(1/ ↑√Real.pi):= by rw [@NonUnitalNonAssocRing.right_distrib]
+      _= (cexp (-↑z.im ^ 2) * f₁ z.re )/↑√Real.pi+  (cexp (-↑z.im ^ 2) * f₂ z.re)*(1/ ↑√Real.pi):= by
         congr 1
         rw [@mul_one_div]
-      _= (cexp (↑z.im ^ 2) * f₁ z.re )/↑√Real.pi+  (cexp (↑z.im ^ 2) * f₂ z.re)/↑√Real.pi:= by
+      _= (cexp (-↑z.im ^ 2) * f₁ z.re )/↑√Real.pi+  (cexp (-↑z.im ^ 2) * f₂ z.re)/↑√Real.pi:= by
         rw [@mul_one_div]
     rw[f_tilde_linear_z]
   rw[f_tilde_linear]
@@ -144,22 +149,78 @@ theorem RealLaplaceTransform_additive
     exact h_int₂
   apply GeneralizedLaplaceTransform_additive L f_tilde₁ f_tilde₂ μ_c p h_integrable₁ h_integrable₂
 
-theorem RealLaplaceTransformIs
-   (f: ℝ → ℂ) (p: ℂ):
-  RealLaplaceTransform f p = ∫t, NormedSpace.exp ℂ (-p*t) * (f t) ∂μ  := by
-  let all_R: set ℝ := ℝ
-  let μ_2 : Measure ℝ × ℝ := volume.restrict (non_negative_reals × ℝ )
-  unfold RealLaplaceTransform
-  unfold L
+theorem RealLaplaceTransformIs (f: ℝ → ℂ) (p: ℂ):
+RealLaplaceTransform f p = ∫t, NormedSpace.exp ℂ (-p*t) * (f t) ∂μ  := by
+  unfold  RealLaplaceTransform
   unfold GeneralizedLaplaceTransform
+  unfold L
   unfold fullLaplaceKernel
   unfold laplaceKernel
   simp_all only [smul_eq_mul, mul_one, ite_mul, zero_mul, neg_mul]
   have equiv := Complex.measurableEquivRealProd
-  have  equality_laplace:∫ (e : ℂ), cexp (-↑e.im ^ 2) * f e.re / ↑√Real.pi * NormedSpace.exp ℂ (-(e * p)) ∂μ_c =
-  ∫ (t : ℝ), NormedSpace.exp ℂ (-(p * ↑t)) * f t ∂μ := by calc
-    ∫ (e : ℂ), cexp (-↑e.im ^ 2) * f e.re / ↑√Real.pi * NormedSpace.exp ℂ (-(e * p)) ∂μ_c =
-    ∫ (e: ( ℝ× ℝ)), cexp (-e.2 ^ 2) * f e.1 / ↑√Real.pi * NormedSpace.exp ℂ (-(e.1 * p)) ∂volume
+  let g : ℂ → ℂ :=
+  fun e => cexp (-↑e.im ^ 2) * f e.re / ↑√Real.pi *
+                           NormedSpace.exp ℂ (-(e * p))
+  let f_R2 : (ℝ × ℝ) → ℂ := fun x => g (equiv.symm x)
+  have from_Cto_R2 :
+    (∫ e : ℂ, g e ∂ μ_c)
+  = ∫ x : ℝ × ℝ, f_R2 x ∂ Measure.map equiv μ_c := by
+    have h :=
+    MeasureTheory.integral_map_equiv
+      (α := ℂ) (β := ℝ × ℝ)
+      (e := equiv)
+      (μ := μ_c)
+      (f := f_R2)
+    have h2 : (fun z => f_R2 (equiv z)) = g := by
+      funext z
+      simp [f_R2, g]
+    simpa [h2] using h.symm
+  simp[g] at from_Cto_R2
+  simp[from_Cto_R2]
+  simp[f_R2]
+
+  have h_image : equiv '' half_plane_pos_re = (Ici 0 : Set ℝ) ×ˢ univ := by
+    ext ⟨x, y⟩
+    simp [half_plane_pos_re, mem_image, mem_Ici, mem_univ, mem_prod]
+    constructor
+    · rintro ⟨z, hz⟩
+      have hxy := hz.2
+      simp [Complex.measurableEquivRealProd, Prod.mk.inj_iff] at hxy
+      have : x = z.re := by rw [hz.2]; rfl
+      simp at hz ⊢
+      exact hz
+    · rintro ⟨hx, _⟩
+      use x + y * I
+      simp [hx]
+    apply Measure.ext
+    intro s
+
+
+    -- Step 2: utiliser map_restrict
+    have map_eq : Measure.map equiv μ_c.restrict half_plane_pos_re =
+                (volume.restrict (Ici 0)).prod (volume.restrict univ) := by
+    rw [←MeasureTheory.Measure.prod_restrict]
+    congr
+    · -- Restriction sur la première composante
+      apply congr_arg volume.restrict
+      exact rfl
+    · -- Restriction sur la deuxième composante
+      simp
+
+  -- Étape 3 : simplification car volume.restrict univ = volume
+  simp only [volume.restrict_univ] at map_eq
+
+  -- Étape 4 : μ_c est concentrée sur half_plane_pos_re dans notre intégrale
+  have h_support : μ_c.restrict half_plane_pos_re = μ_c := by
+    unfold μ_c
+    -- selon la définition de μ_c comme mesure sur ℂ avec support sur la moitié-plane positive
+    exact measure.ext (λ s, by simp [half_plane_pos_re])
+
+  -- Étape 5 : conclusion
+  rw [h_support] at map_eq
+
+
+
 
 def g (t : ℝ) : ℂ := 1
 

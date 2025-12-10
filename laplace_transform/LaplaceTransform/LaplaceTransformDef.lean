@@ -8,7 +8,8 @@ import Mathlib.MeasureTheory.Integral.Lebesgue.Countable
 import Mathlib.Dynamics.Ergodic.MeasurePreserving
 import Mathlib.MeasureTheory.Integral.Lebesgue.Basic
 import Mathlib.MeasureTheory.Integral.Lebesgue.Norm
-
+import Mathlib.MeasureTheory.Measure.Lebesgue.Complex
+import Mathlib.MeasureTheory.Integral.Prod
 import Mathlib.Topology.Instances.Complex
 import Mathlib.Analysis.SpecialFunctions.Exponential
 import Mathlib.Algebra.GroupWithZero.Action.Defs
@@ -48,125 +49,125 @@ variable {E : Type*} [NormedRing E] [CompleteSpace E]
 -- E is a ℂ-normed vector space
 
 /-- the next function defines the kernel of the Laplace transform-/
-def laplaceKernel (L : E → ℂ → E) (e : E) (s : ℂ) : E :=
-  NormedSpace.exp ℂ (- (L e s))
+def laplaceKernel ( S : Set E) (L : S → ℂ → E) (e : S) (p : ℂ) : E :=
+  NormedSpace.exp ℂ (- (L e p))
 
-def fullLaplaceKernel (L : E → ℂ → E) (f :E → E) (s : ℂ) : E→ E :=
-  fun e ↦ f e * (laplaceKernel L e s )• (1 : E)
+def fullLaplaceKernel ( S : Set E) (L : S → ℂ → E) (f :S → E) (p : ℂ) : S→ E :=
+  fun e ↦ f e * (laplaceKernel S L e p )• (1 : E)
 
 
 theorem fullLaplaceKernel_const_smul
-  (L : E → ℂ → E) (f : E → E)  (r s : ℂ):
-  fullLaplaceKernel L (r • f) s   = r • fullLaplaceKernel L  f s := by
+  ( S : Set E) (L : S → ℂ → E) (f :S → E)  (r p : ℂ):
+  fullLaplaceKernel S L (r • f) p   = r • fullLaplaceKernel S L  f p := by
     ext e
   -- Apply the definition of `fullLaplaceKernel` to the left-hand side (LHS)
     calc
-    (fullLaplaceKernel L (r • f) s) e
-      = ((r • f) e) * (laplaceKernel L e s) • (1 : E)    := by
+    (fullLaplaceKernel S L (r • f) p) e
+      = ((r • f) e) * (laplaceKernel S L e p) • (1 : E)    := by
           exact rfl
-    _ = (r • (f e)) * (laplaceKernel L e s) • (1 : E)    := by
+    _ = (r • (f e)) * (laplaceKernel S L e p) • (1 : E)    := by
           simp only [Pi.smul_apply]
-    _ = r • ( (f e) * (laplaceKernel L e s) • (1 : E) ) := by
+    _ = r • ( (f e) * (laplaceKernel S L e p) • (1 : E) ) := by
           rw [smul_mul_assoc]
-    _ = (r • fullLaplaceKernel L f s) e                   := by
+    _ = (r • fullLaplaceKernel S L f p) e                   := by
           simp only [fullLaplaceKernel, Pi.smul_apply]
 
 theorem fullLaplaceKernel_complex_add
-  (L : E → ℂ → E) (f : E → E)  (r s : ℂ)
-   (h_L_linear : ∀ (e : E) (s₁ s₂ : ℂ),
-   L e (s₁ + s₂) = L e s₁ + L e s₂)
+ ( S : Set E)(L : S → ℂ → E) (f : S→ E)  (r p : ℂ)
+   (h_L_linear : ∀ (e : S) (p₁ p₂ : ℂ),
+   L e (p₁ + p₂) = L e p₁ + L e p₂)
    (h_E_commute :  ∀ (e₁ e₂ : E), Commute e₁ e₂):
-    fullLaplaceKernel L f (r+s)= fullLaplaceKernel L (fullLaplaceKernel L f r) s:= by
+    fullLaplaceKernel S L f (r+p)= fullLaplaceKernel S L (fullLaplaceKernel S L f r) p:= by
     ext e
     calc
-    (fullLaplaceKernel L f (r+s)) e
-      = f e * (laplaceKernel L e (r+s) )• (1 : E):= by rw[fullLaplaceKernel]
-    _=f e * (NormedSpace.exp ℂ (- (L e (r+s))) )• (1 : E) := by rw[laplaceKernel]
-    _=f e * (NormedSpace.exp ℂ (- (L e r+ L e s)))• (1 : E):= by rw[h_L_linear]
-    _=f e * (NormedSpace.exp ℂ (- L e r +(- L e s)))• (1 : E):= by rw [@neg_add]
-    _=f e * (NormedSpace.exp ℂ (- L e r +(- L e s)))• (1 : E)• (1 : E):= by rw [one_smul]
-    _=f e * (NormedSpace.exp ℂ (- L e r) * NormedSpace.exp ℂ (- L e s))• (1 : E)• (1 : E) := by
-      have h_comm : Commute (-(L e r)) (-(L e s)) := by
+    (fullLaplaceKernel S L f (r+p)) e
+      = f e * (laplaceKernel S L e (r+p) )• (1 : E):= by rw[fullLaplaceKernel]
+    _=f e * (NormedSpace.exp ℂ (- (L e (r+p))) )• (1 : E) := by rw[laplaceKernel]
+    _=f e * (NormedSpace.exp ℂ (- (L e r+ L e p)))• (1 : E):= by rw[h_L_linear]
+    _=f e * (NormedSpace.exp ℂ (- L e r +(- L e p)))• (1 : E):= by rw [@neg_add]
+    _=f e * (NormedSpace.exp ℂ (- L e r +(- L e p)))• (1 : E)• (1 : E):= by rw [one_smul]
+    _=f e * (NormedSpace.exp ℂ (- L e r) * NormedSpace.exp ℂ (- L e p))• (1 : E)• (1 : E) := by
+      have h_comm : Commute (-(L e r)) (-(L e p)) := by
         apply Commute.neg_left
         apply Commute.neg_right
         -- Since h_E_commute holds for ALL elements, it holds for L e r and L e s
-        exact h_E_commute (L e r) (L e s)
+        exact h_E_commute (L e r) (L e p)
       rw [NormedSpace.exp_add_of_commute h_comm]
-    _=(f e * NormedSpace.exp ℂ (- L e r) )* NormedSpace.exp ℂ (- L e s)• (1 : E)• (1 : E) :=by
+    _=(f e * NormedSpace.exp ℂ (- L e r) )* NormedSpace.exp ℂ (- L e p)• (1 : E)• (1 : E) :=by
       simp_all only [smul_eq_mul, mul_one]
       rw [@NonUnitalRing.mul_assoc]
-    _=((f e * NormedSpace.exp ℂ (- L e r) )• (1 : E))* NormedSpace.exp ℂ (- L e s)• (1 : E) := by
+    _=((f e * NormedSpace.exp ℂ (- L e r) )• (1 : E))* NormedSpace.exp ℂ (- L e p)• (1 : E) := by
       simp only [smul_eq_mul, mul_one]
-    _=((f e * laplaceKernel L e r)• (1 : E)) * (laplaceKernel L e s)• (1 : E):= by
+    _=((f e * laplaceKernel S L e r)• (1 : E)) * (laplaceKernel S L e p)• (1 : E):= by
         simp only [laplaceKernel]
-    _=(f e * (laplaceKernel L e r)• (1 : E))* (laplaceKernel L e s)• (1 : E):= by
+    _=(f e * (laplaceKernel S L e r)• (1 : E))* (laplaceKernel S L e p)• (1 : E):= by
        simp only [smul_eq_mul, mul_one]
-    _= ((fullLaplaceKernel L f r) e)* (laplaceKernel L e s)• (1 : E):= by
+    _= ((fullLaplaceKernel S L f r) e)* (laplaceKernel S L e p)• (1 : E):= by
       rw[fullLaplaceKernel]
-    _= (fullLaplaceKernel L (fullLaplaceKernel L f r) s) e:= by
+    _= (fullLaplaceKernel S L (fullLaplaceKernel S L f r) p) e:= by
       rw [←fullLaplaceKernel]
 
 
 
 -- The Laplace Transform of a function f: V → E with kernel defined by L.
-def GeneralizedLaplaceTransform (L : E → ℂ → E) (f :E → E) (μ : Measure E) : ℂ → E  :=
-  fun s ↦ ∫ e, fullLaplaceKernel L f s e  ∂μ
+def GeneralizedLaplaceTransform( S : Set E) (L : S → ℂ → E) (f :S → E) (μ : Measure S) : ℂ → E  :=
+  fun p ↦ ∫ e, fullLaplaceKernel S L f p e  ∂μ
 
 theorem GeneralizedLaplaceTransform_const_smul
   {h_nr: NormedRing E} {h_c: CompleteSpace E}
   {h_na : NormedAlgebra ℂ E} {h_bounded: IsBoundedSMul ℂ E}
-   (L : E → ℂ → E) (f : E → E) (μ : Measure E) (r s : ℂ)
-  (h_int : Integrable (fullLaplaceKernel L f s ) μ) :
-  GeneralizedLaplaceTransform L (r • f) μ s = r • GeneralizedLaplaceTransform L f μ s := by
+   ( S : Set E)(L : S → ℂ → E) (f : S → E) (μ : Measure S) (r p : ℂ)
+  (h_int : Integrable (fullLaplaceKernel S L f p ) μ) :
+  GeneralizedLaplaceTransform S L (r • f) μ p = r • GeneralizedLaplaceTransform S L f μ p := by
   calc
-  GeneralizedLaplaceTransform L (r • f) μ s
-      = ∫ e, fullLaplaceKernel L (r • f) s e ∂μ := by rw [GeneralizedLaplaceTransform]
-  _ = ∫ e, r • fullLaplaceKernel L f s e ∂μ := by
+  GeneralizedLaplaceTransform S L (r • f) μ p
+      = ∫ e, fullLaplaceKernel S L (r • f) p e ∂μ := by rw [GeneralizedLaplaceTransform]
+  _ = ∫ e, r • fullLaplaceKernel S L f p e ∂μ := by
       -- factor r inside fullLaplaceKernel
       congr 1
-      rw[fullLaplaceKernel_const_smul L f r s]
+      rw[fullLaplaceKernel_const_smul S L f r p]
       simp_all only [Pi.smul_apply]
-  _ = r • ∫ e, fullLaplaceKernel L f s e ∂μ := by
+  _ = r • ∫ e, fullLaplaceKernel S L f p e ∂μ := by
     rw[integral_smul r]
-  _=  r • GeneralizedLaplaceTransform L f μ s := by rw [GeneralizedLaplaceTransform]
+  _=  r • GeneralizedLaplaceTransform S L f μ p := by rw [GeneralizedLaplaceTransform]
 
 
 theorem GeneralizedLaplaceTransform_additive
-  (L : E → ℂ → E) (f₁ : E → E)(f₂: E → E) (μ : Measure E) (s : ℂ)
-  (h_int₁ : Integrable (fullLaplaceKernel L f₁ s ) μ)
-  (h_int₂ : Integrable (fullLaplaceKernel L f₂ s ) μ):
-  GeneralizedLaplaceTransform L (f₁ + f₂) μ s =  GeneralizedLaplaceTransform L f₁ μ s + GeneralizedLaplaceTransform L f₂ μ s := by
+  ( S : Set E)(L : S → ℂ → E) (f₁ : S → E)(f₂: S → E) (μ : Measure S) (p : ℂ)
+  (h_int₁ : Integrable (fullLaplaceKernel S L f₁ p ) μ)
+  (h_int₂ : Integrable (fullLaplaceKernel S L f₂ p ) μ):
+  GeneralizedLaplaceTransform S L (f₁ + f₂) μ p =  GeneralizedLaplaceTransform S L f₁ μ p + GeneralizedLaplaceTransform S L f₂ μ p := by
   calc
-  GeneralizedLaplaceTransform L (f₁ + f₂) μ s=∫ (e : E), fullLaplaceKernel L (f₁ + f₂) s e ∂μ:= by
+  GeneralizedLaplaceTransform S L (f₁ + f₂) μ p=∫ (e : S), fullLaplaceKernel S L (f₁ + f₂) p e ∂μ:= by
     rw [GeneralizedLaplaceTransform]
-  _=∫ (e : E),  ((f₁+f₂) e * (laplaceKernel L e s )• (1 : E)) ∂μ := by
+  _=∫ (e : S),  ((f₁+f₂) e * (laplaceKernel S L e p )• (1 : E)) ∂μ := by
     simp_rw [fullLaplaceKernel]
-  _=∫ (e : E),  ((f₁ e +f₂ e) * (laplaceKernel L e s )• (1 : E)) ∂μ:= by
+  _=∫ (e : S),  ((f₁ e +f₂ e) * (laplaceKernel S L e p )• (1 : E)) ∂μ:= by
     simp_all only [Pi.add_apply,smul_eq_mul, mul_one]
-  _= ∫ (e : E),  (f₁ e  * (laplaceKernel L e s )• (1 : E) +f₂ e * (laplaceKernel L e s )• (1 : E)) ∂μ:= by
+  _= ∫ (e : S),  (f₁ e  * (laplaceKernel S L e p )• (1 : E) +f₂ e * (laplaceKernel S L e p )• (1 : E)) ∂μ:= by
     simp_rw [add_mul]
-  _= ∫ (e : E),  (f₁ e  * (laplaceKernel L e s )• (1 : E))∂μ +∫ (e : E),(f₂ e * (laplaceKernel L e s )• (1 : E)) ∂μ:= by
+  _= ∫ (e : S),  (f₁ e  * (laplaceKernel S L e p )• (1 : E))∂μ +∫ (e : S),(f₂ e * (laplaceKernel S L e p )• (1 : E)) ∂μ:= by
     exact integral_add h_int₁ h_int₂
-  _=∫ (e : E), fullLaplaceKernel L f₁ s e ∂μ + ∫ (e : E), fullLaplaceKernel L f₂ s e ∂μ:= by simp_rw[fullLaplaceKernel]
-  _= GeneralizedLaplaceTransform L f₁ μ s + GeneralizedLaplaceTransform L f₂ μ s := by
+  _=∫ (e : S), fullLaplaceKernel S L f₁ p e ∂μ + ∫ (e : S), fullLaplaceKernel S L f₂ p e ∂μ:= by simp_rw[fullLaplaceKernel]
+  _= GeneralizedLaplaceTransform S L f₁ μ p + GeneralizedLaplaceTransform S L f₂ μ p := by
     simp_rw [GeneralizedLaplaceTransform]
 
 theorem GeneralizedLaplaceTransform_complex_add
-  (L : E → ℂ → E) (f : E → E)(μ : Measure E) (s₁ s₂: ℂ)
-  (h_L_linear : ∀ (e : E) (s₁ s₂ : ℂ),
-   L e (s₁ + s₂) = L e s₁ + L e s₂)
-  (h_int₁ : Integrable (fullLaplaceKernel L f s₁ ) μ)
-  (h_int₂ : Integrable (fullLaplaceKernel L f (s₁+s₂) ) μ)
+  ( S : Set E)(L : S → ℂ → E) (f : S → E)(μ : Measure S) (p₁ p₂: ℂ)
+  (h_L_linear : ∀ (e : S) (p₁ p₂ : ℂ),
+   L e (p₁ + p₂) = L e p₁ + L e p₂)
+  (h_int₁ : Integrable (fullLaplaceKernel S L f p₁ ) μ)
+  (h_int₂ : Integrable (fullLaplaceKernel S L f (p₁+p₂) ) μ)
   (h_E_commute :  ∀ (e₁ e₂ : E), Commute e₁ e₂):
-  GeneralizedLaplaceTransform L f μ (s₁+s₂) =  GeneralizedLaplaceTransform L (fullLaplaceKernel L f s₁) μ s₂ := by
+  GeneralizedLaplaceTransform S L f μ (p₁+p₂) =  GeneralizedLaplaceTransform S L (fullLaplaceKernel S L f p₁) μ p₂ := by
   calc
-  GeneralizedLaplaceTransform L f μ (s₁+s₂) =∫ (e : E), fullLaplaceKernel L f (s₁+s₂) e ∂μ:= by
+  GeneralizedLaplaceTransform S L f μ (p₁+p₂) =∫ (e : S), fullLaplaceKernel S L f (p₁+p₂) e ∂μ:= by
     rw [GeneralizedLaplaceTransform]
-  _=∫ (e : E),  fullLaplaceKernel L (fullLaplaceKernel L f s₁) s₂ e ∂μ := by
+  _=∫ (e : S),  fullLaplaceKernel S L (fullLaplaceKernel S L f p₁) p₂ e ∂μ := by
      congr 1
      ext e
-     rw[←fullLaplaceKernel_complex_add L f s₁ s₂ h_L_linear h_E_commute]
-  _= GeneralizedLaplaceTransform L (fullLaplaceKernel L f s₁) μ s₂ := by
+     rw[←fullLaplaceKernel_complex_add S L f p₁ p₂ h_L_linear h_E_commute]
+  _= GeneralizedLaplaceTransform S L (fullLaplaceKernel S L f p₁) μ p₂ := by
     rw[GeneralizedLaplaceTransform]
 
 end Defs
