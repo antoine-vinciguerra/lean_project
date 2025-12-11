@@ -68,10 +68,10 @@ def non_negative_reals : Set ℝ := Ici 0
 
 
 -- Define the measure on [0, ∞) as the Lebesgue measure restricted to that set
+def μ_real : Measure ℝ := volume.restrict non_negative_reals
 def μ_r : Measure realLine :=
-  (Measure.comap Subtype.val volume).restrict nonNegativeRealLine
--- Define the measure this time on reals
-def μ_real: Measure ℝ := volume.restrict non_negative_reals
+  Measure.map real_to_realLine μ_real
+
 
 
 -- Now define the same for the right hand halfplane of the complex
@@ -105,11 +105,97 @@ theorem RealLaplaceTransform_additive
   unfold RealLaplaceTransform
   apply GeneralizedLaplaceTransform_additive realLine L g₁ g₂ μ_r p h_int₁ h_int₂
 
-theorem RealLaplaceTransformIs (f: ℝ → ℂ) (p: ℂ):
+theorem RealLaplaceTransformIs (f: ℝ → ℂ) (hf : Measurable f) (p: ℂ):
 RealLaplaceTransform f p = ∫t,cexp (-p*t) * (f t) ∂μ_real  := by
-  unfold  RealLaplaceTransform
-  unfold GeneralizedLaplaceTransform
-  unfold L
+  change (GeneralizedLaplaceTransform realLine L (fun x => f (realLine_to_real x)) μ_r) p =
+         ∫ t, cexp (-p * t) * f t ∂μ_real
+  simp [GeneralizedLaplaceTransform]
+  unfold fullLaplaceKernel
+  unfold laplaceKernel
+  have hL_x_realLine: ∀ x : realLine, NormedSpace.exp ℂ (-L x p) = NormedSpace.exp ℂ (-x.val * p) := by
+    intro x; simp [L]
+
+  have h_unfold_g : ∀ e : realLine, (fun x ↦ f (realLine_to_real x)) e = f (realLine_to_real e):= by
+    simp only [implies_true]
+  have exp_eq : ∀ z : ℂ, (NormedSpace.exp ℂ z) = Complex.exp z := by
+    intro z
+    rw [Complex.exp_eq_exp_ℂ]
+
+  calc  ∫ (e : ↑realLine), (fun x ↦ f (realLine_to_real x)) e * NormedSpace.exp ℂ (-L e p) • 1 ∂μ_r
+    _=∫ (e : ↑realLine),  f (realLine_to_real e)* NormedSpace.exp ℂ (-L e p) • 1 ∂μ_r:= by
+      congr
+    _ =∫ (e : ↑realLine),  f (realLine_to_real e)* NormedSpace.exp ℂ (-e.val * p) • 1 ∂μ_r:= by
+      congr
+      ext e
+      rw[hL_x_realLine]
+    _=∫ (e : ↑realLine),  f (realLine_to_real e)* Complex.exp (-e.val * p)  • 1 ∂μ_r:= by
+      congr
+      ext e
+      rw[exp_eq]
+    _=∫ (t : ℝ), (f (realLine_to_real (real_to_realLine t))) * Complex.exp (- (real_to_realLine t).val * p) • (1 : ℂ) ∂μ_real := by
+      have h_μ: μ_r = Measure.map real_to_realLine μ_real := rfl
+      rw[h_μ]
+      have real_to_realLine_measurable : Measurable real_to_realLine := by
+        apply Measurable.subtype_mk
+        exact measurable_ofReal
+
+      have realLine_to_real_measurable : Measurable realLine_to_real := by
+        have val_measurable : Measurable (Subtype.val : realLine → ℂ) :=
+        measurable_subtype_coe
+        have re_measurable : Measurable Complex.re := measurable_re
+        exact re_measurable.comp val_measurable
+
+      have h_meas_g : Measurable (fun e : realLine =>
+  f (realLine_to_real e) * Complex.exp (- e.val * p)• (1 : ℂ)) := by
+        have g1 : Measurable (fun e : realLine => f (realLine_to_real e)) := Measurable.comp hf realLine_to_real_measurable
+        have g2 : Measurable (fun e : realLine => Complex.exp (- e.val * p)) := by
+          have measure_exp : Measurable (Complex.exp) :=
+            continuous_exp.measurable
+          have measure_exponent : Measurable (fun e : realLine => - (e.val * p)) :=
+            (continuous_neg.comp (continuous_mul_right p)).measurable.comp measurable_subtype_coe
+          have two_funct_eq: (fun e : realLine => - (e.val * p))= (fun e : realLine => - e.val * p) :=by
+            funext e
+            simp only [neg_mul]
+          rw[two_funct_eq] at measure_exponent
+          exact measure_exp.comp (measure_exponent)
+        have g1_mul_g2: Measurable (fun e : realLine =>
+        f (realLine_to_real e) * Complex.exp (- e.val * p)):= g1.mul g2
+        have two_funct_eq_bis: (fun e : realLine =>
+        f (realLine_to_real e) * Complex.exp (- e.val * p))=
+        (fun e : realLine =>
+        f (realLine_to_real e) * Complex.exp (- e.val * p)• (1 : ℂ)) :=by
+          funext e
+          simp_all only [neg_mul, Subtype.forall, implies_true, smul_eq_mul, mul_one]
+        rw[two_funct_eq_bis] at g1_mul_g2
+        exact g1_mul_g2
+
+      have h_aemeas_map : AEMeasurable real_to_realLine μ_real := real_to_realLine_measurable.aemeasurable
+      have h_aestrongly_meas_g : AEStronglyMeasurable (fun e : ↑realLine => f (realLine_to_real e) * Complex.exp (-e.val * p)• (1 : ℂ)) μ_r :=
+        h_meas_g.aestronglyMeasurable
+
+      rw [MeasureTheory.integral_map h_aemeas_map h_aestrongly_meas_g]
+    _= ∫ (t : ℝ), f (t) * Complex.exp (- (real_to_realLine t).val * p) • (1 : ℂ) ∂μ_real := by
+      congr
+    _=∫ (t : ℝ), f (t) * Complex.exp (- t * p) • (1 : ℂ) ∂μ_real :=  by
+      congr
+    _= ∫ (t : ℝ), f (t) * Complex.exp (- t * p) ∂μ_real := by
+      congr
+      funext e
+      simp_all only [neg_mul, Subtype.forall, implies_true, smul_eq_mul, mul_one]
+    _= ∫ (t : ℝ), f (t) * Complex.exp (- (t * p)) ∂μ_real := by
+      congr
+      funext x
+      rw [@neg_mul]
+    _=∫ (t : ℝ), f (t) * Complex.exp (- (p*t)) ∂μ_real := by
+      congr
+      funext x
+      rw [← mul_comm p x]
+    _=∫ (t : ℝ), Complex.exp (- (p*t))* f (t)  ∂μ_real := by
+      congr
+      funext x
+      rw [← mul_comm]
+
+
   unfold fullLaplaceKernel
   unfold laplaceKernel
   simp_all only [smul_eq_mul, mul_one, ite_mul, zero_mul, neg_mul]
