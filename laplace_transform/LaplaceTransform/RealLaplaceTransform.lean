@@ -196,51 +196,112 @@ RealLaplaceTransform f p = ∫t,cexp (-p*t) * (f t) ∂μ_real  := by
       rw [← mul_comm]
 
 
-
-theorem iszero
-  (s: ℂ): RealLaplaceTransform g s = 0 := by
-  unfold RealLaplaceTransform
-  unfold L
-  unfold GeneralizedLaplaceTransform
-  unfold fullLaplaceKernel
-  unfold laplaceKernel
-  unfold g
-  simp_all only [smul_eq_mul, mul_one, ite_mul, zero_mul, neg_mul]
-  simp_all only [one_mul]
-  apply integral_eq_zero_of_ae
-  rw [Filter.EventuallyEq, ae_iff]
-  simp_all only [Pi.zero_apply, ite_eq_right_iff, Classical.not_imp]
-  sorry
-
-
--- We show that that the definition of the laplace transform is as expected
-def g_1 (t : ℝ) : ℂ := 1
-def ExpectedLaplaceTransform (f : ℝ → ℂ) (p : ℂ) : ℂ := ∫t, NormedSpace.exp ℂ (-p*t) * (f t) ∂μ
-theorem LaplaceTransformAppliedToOne
-   (s: ℂ) (h: 0 < s.re): ExpectedLaplaceTransform g_1 s = 1/s := by
-   unfold ExpectedLaplaceTransform
-   calc ExpectedLaplaceTransform g_1 s
-    = lim (atTop.map (fun T => ∫ t in Ioc 0 T, Complex.exp (-s * ↑t) * g_1 t ∂μ)) := by
-    sorry
-
-
--- We now now apply prove the left-hand side of the table of Laplace transforms
-
--- We define the function f(x) = 1
-
-def f (t : ℝ) : ℂ := 1
--- We apply the Laplace transform to f
-theorem LaplaceTransformAppliedToOne
-   (s: ℂ) (h: 0 < s.re): RealLaplaceTransform f s = 1/s := by
-   unfold RealLaplaceTransform
-   let f_tilde (z : ℂ) : ℂ :=
-      if z.im = 0 then f z.re else 0
-   calc GeneralizedLaplaceTransform L (fun z ↦ if z.im = 0 then f z.re else 0) μ_c s = ∫t, NormedSpace.exp ℂ (-s*(t : ℂ)) * (f_tilde t) ∂μ_c := by
-    rw[GeneralizedLaplaceTransform]
-  sorry
-
 end Defs
 
+section LaplaceInverse
+--In this section we will prove the formula of the inverse Fourier Transform
+-- First we need to define what will be in the integrand
+--the integral sum is defined over the sum of two reals
+def imNbFromReals (γ : ℝ) (T : ℝ) : ℂ :=
+  (γ : ℂ) + (T : ℂ) * I
+def InverseLaplaceKernel (F : ℂ → ℂ) (t : ℝ) : ℝ → ℝ → ℂ :=
+  fun γ T ↦ I*(Complex.exp ( (imNbFromReals γ T) * t)) * F (imNbFromReals γ T)
+
+def InverseLaplaceKernelFunctT (F : ℂ → ℂ) (t : ℝ)(γ : ℝ): ℝ→ ℂ:=
+  (InverseLaplaceKernel F t) γ
+
+theorem InverseLaplaceKernelAdditive (F₁ : ℂ → ℂ) (F₂ : ℂ → ℂ)(t : ℝ):
+  InverseLaplaceKernel (F₁+F₂) t = (InverseLaplaceKernel F₁ t) +(InverseLaplaceKernel F₂ t):=by
+    funext γ
+    funext T
+    unfold InverseLaplaceKernel
+
+    calc I * cexp (imNbFromReals γ T * ↑t) * (F₁ + F₂) (imNbFromReals γ T)
+      _= I * cexp (imNbFromReals γ T * ↑t) *(F₁ (imNbFromReals γ T) + F₂ (imNbFromReals γ T)):= by
+        simp_all only [Pi.add_apply]
+      _=I * cexp (imNbFromReals γ T * ↑t) *F₁ (imNbFromReals γ T) + I * cexp (imNbFromReals γ T * ↑t) *F₂ (imNbFromReals γ T) := by
+        rw [@left_distrib]
+
+theorem InverseLaplaceKernelConst (F : ℂ → ℂ)(c:ℂ)(t : ℝ):
+  InverseLaplaceKernel (c •F) t = c •(InverseLaplaceKernel F t):=by
+    funext γ
+    funext T
+    unfold InverseLaplaceKernel
+
+    calc I * cexp (imNbFromReals γ T * ↑t) * (c • F) (imNbFromReals γ T)
+      _= I * cexp (imNbFromReals γ T * ↑t) * c * F (imNbFromReals γ T):= by
+        simp only [Pi.smul_apply, smul_eq_mul]
+        rw [← @NonUnitalRing.mul_assoc]
+      _= I * c* cexp (imNbFromReals γ T * ↑t) * F (imNbFromReals γ T):= by
+        rw [@mul_mul_mul_comm']
+      _= c*I *cexp (imNbFromReals γ T * ↑t) * F (imNbFromReals γ T):= by
+        ring
+      _= (c • fun γ T ↦ I * cexp (imNbFromReals γ T * ↑t) * F (imNbFromReals γ T)) γ T:= by
+        simp only [Pi.smul_apply, smul_eq_mul]
+        ring
+
+
+--We know define the inverseLaplace. This is conditioned to gamma being chosen so that our integral is integrable
+def inverseLaplace_t (F : ℂ → ℂ) (γ t : ℝ)
+ : ℂ :=
+  1/(2*I*Real.pi ) * ∫ T : ℝ, InverseLaplaceKernel F t γ T
+
+def inverseLaplaceFunction (F : ℂ → ℂ) (γ: ℝ) (S: Set ℝ)
+(h_integrable_in_S : ∀ t∈ S, Integrable ((InverseLaplaceKernelFunctT F t) γ ) volume)
+ : S → ℂ :=
+fun t↦ inverseLaplace_t F γ t
+
+theorem inverseLaplaceAdditive_t(F₁: ℂ → ℂ) (F₂: ℂ → ℂ)(γ t : ℝ)
+(h₁ :  Integrable (InverseLaplaceKernelFunctT F₁ t γ ) volume)
+(h₂ : Integrable (InverseLaplaceKernelFunctT F₂ t γ ) volume): inverseLaplace_t (F₁+F₂) γ t = inverseLaplace_t F₁ γ t + inverseLaplace_t F₂ γ t:= by
+  unfold inverseLaplace_t
+  have h_const_ne_zero : (1 / (2 * I * ↑Real.pi) : ℂ) ≠ 0 := by
+    simp_all only [one_div, mul_inv_rev, inv_I, neg_mul, mul_neg, ne_eq, neg_eq_zero, mul_eq_zero, inv_eq_zero,
+      ofReal_eq_zero, Real.pi_ne_zero, I_ne_zero, OfNat.ofNat_ne_zero, or_self, not_false_eq_true]
+  field_simp [h_const_ne_zero]
+
+  calc ∫ (T : ℝ), InverseLaplaceKernel (F₁ + F₂) t γ T
+    _=∫ (T : ℝ), (InverseLaplaceKernelFunctT F₁ t γ T +InverseLaplaceKernelFunctT F₂ t γ T ):=by
+      congr
+      funext T
+      simp[InverseLaplaceKernelAdditive F₁ F₂ t]
+      have h_eq₁ :InverseLaplaceKernel F₁ t γ T = InverseLaplaceKernelFunctT F₁ t γ T:= by
+        simp[InverseLaplaceKernel,InverseLaplaceKernelFunctT]
+      have h_eq₂ :InverseLaplaceKernel F₂ t γ T = InverseLaplaceKernelFunctT F₂ t γ T:= by
+        simp[InverseLaplaceKernel,InverseLaplaceKernelFunctT]
+      simp[h_eq₁]
+      simp[h_eq₂]
+    _=(∫ T: ℝ, InverseLaplaceKernelFunctT F₁ t γ T) + ∫ T : ℝ, InverseLaplaceKernelFunctT F₂ t γ T:= by
+      have h_integrable:= integral_add h₁ h₂
+      simp[h_integrable]
+
+theorem inverseLaplaceConst_t(F: ℂ → ℂ) (c:ℂ)(γ t : ℝ)
+(h_integrable :  Integrable (InverseLaplaceKernelFunctT F t γ ) volume)
+: inverseLaplace_t (c • F) γ t = c* inverseLaplace_t F γ t:= by
+  unfold inverseLaplace_t
+  have h_const_ne_zero : (1 / (2 * I * ↑Real.pi) : ℂ) ≠ 0 := by
+    simp_all only [one_div, mul_inv_rev, inv_I, neg_mul, mul_neg, ne_eq, neg_eq_zero, mul_eq_zero, inv_eq_zero,
+      ofReal_eq_zero, Real.pi_ne_zero, I_ne_zero, OfNat.ofNat_ne_zero, or_self, not_false_eq_true]
+  field_simp [h_const_ne_zero]
+
+  calc ∫ (T : ℝ), InverseLaplaceKernel (c • F) t γ T
+    _=∫ (T : ℝ),( c •(InverseLaplaceKernel F t)) γ T :=by
+      congr
+      simp[InverseLaplaceKernelConst]
+    _=∫ (T : ℝ), c *(InverseLaplaceKernel F t γ T) :=by
+      simp_all only [one_div, mul_inv_rev, inv_I, neg_mul, mul_neg, ne_eq, neg_eq_zero, mul_eq_zero, inv_eq_zero,
+        ofReal_eq_zero, Real.pi_ne_zero, I_ne_zero, OfNat.ofNat_ne_zero, or_self, not_false_eq_true, Pi.smul_apply,
+        smul_eq_mul]
+    _=∫ (T : ℝ), c *(InverseLaplaceKernelFunctT F t γ T):= by
+      congr
+       _ = c * ∫ (T : ℝ), InverseLaplaceKernelFunctT F t γ T := by
+      simpa using
+        (integral_const_mul c (InverseLaplaceKernelFunctT F t γ))
+
+
+
+
+end LaplaceInverse
 section LaplaceTable
 
 open Complex
