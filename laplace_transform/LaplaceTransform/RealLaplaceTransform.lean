@@ -28,7 +28,7 @@ import Mathlib.Analysis.Complex.Exponential
 
 import Mathlib.Data.Complex.Basic
 import Mathlib.Data.List.Defs
-
+import Mathlib.Analysis.SpecialFunctions.Integrals.Basic
 
 /-!
 
@@ -241,13 +241,50 @@ lemma integral_cexp_Icc_Dirichlet
       simp [ hT]
       rw [@two_mul]
   · simp [hω, ω]
-    have hinner : ∀ x : ℝ,
-    HasDerivAt (fun x : ℝ => (I : ℂ) * (x : ℂ) * ω) (I * ω) x := by
-      intro x
-      have h1 : HasDerivAt (fun y : ℝ => (y : ℂ)) 1 x := by
-        simp [HasDerivAt]
-        exact HasDerivAt. (λ t, (t : ℂ)) 1 (by simp)
-      exact h1.const_smul (I * ω)
+    have: ∫ (r : ℝ) in Icc (-T) T, cexp (I * ↑r * (↑t - ↑a))= ∫ (r : ℝ) in -T..T, cexp (I * ↑r * (↑t - ↑a)):= by
+      rw [@integral_Icc_eq_integral_Ioc]
+      rw [← intervalIntegral.integral_of_le]
+      simp[hT]
+    rw[this]
+    have: ∫ (r : ℝ) in -T..T, cexp (I * ↑r * (↑t - ↑a))= ∫ (r : ℝ) in -T..T, cexp (I * (ω:ℂ)* ↑r) := by
+      congr
+      ext r
+      have : ↑t - ↑a= (ω:ℂ) := by
+        rw [ofReal_sub]
+      rw[this]
+      ring_nf
+    rw[this]
+    rw[integral_exp_mul_complex]
+    case neg=>
+      have : cexp (I * ↑ω * ↑(-T))= cexp (-I *  (↑T* ↑ω)):= by
+            push_cast
+            ring_nf
+      rw[this]
+      have : cexp (I * ↑ω * T)= cexp (I *  (↑T* ↑ω)):= by
+            ring_nf
+      rw[this]
+      have : cexp (I * (↑T * ↑ω)) - cexp (-I * (↑T * ↑ω))= 2* I * Complex.sin (↑T * ↑ω) := by
+        unfold Complex.sin
+        ring_nf
+        simp[I_sq]
+        ring_nf
+      rw[this]
+      unfold ω
+      simp only [ofReal_sub]
+      have hI : I ≠ 0 := I_ne_zero
+      have h_wa : ((t : ℂ) - a) ≠ 0 := by
+        simp [ω] at hω
+        rw[← ofReal_sub]
+        exact ofReal_ne_zero.mpr hω
+
+      field_simp [hI, h_wa]
+    case neg=>
+      apply mul_ne_zero
+      · exact I_ne_zero
+      · exact ofReal_ne_zero.mpr hω
+
+
+
 
 def imNbFromReals (γ : ℝ) (T : ℝ) : ℂ :=
   (γ : ℂ) + (T : ℂ) * I
@@ -313,7 +350,7 @@ theorem inverseLaplaceAdditive_t(F₁: ℂ → ℂ) (F₂: ℂ → ℂ)(γ t : �
 (h₂ : Integrable (InverseLaplaceKernelFunctT F₂ t γ ) volume): inverseLaplace_t (F₁+F₂) γ t = inverseLaplace_t F₁ γ t + inverseLaplace_t F₂ γ t:= by
   unfold inverseLaplace_t
   have h_const_ne_zero : (1 / (2 * I * ↑Real.pi) : ℂ) ≠ 0 := by
-    simp_all only [one_div, mul_inv_rev, inv_I, neg_mul, mul_neg, ne_eq, neg_eq_zero, mul_eq_zero, inv_eq_zero,
+    simp_all only [one_div, mul_inv_rev, inv_I, ne_eq, neg_eq_zero, mul_eq_zero, inv_eq_zero,
       ofReal_eq_zero, Real.pi_ne_zero, I_ne_zero, OfNat.ofNat_ne_zero, or_self, not_false_eq_true]
   field_simp [h_const_ne_zero]
 
@@ -355,16 +392,69 @@ theorem inverseLaplaceConst_t(F: ℂ → ℂ) (c:ℂ)(γ t : ℝ)
       simpa using
         (integral_const_mul c (InverseLaplaceKernelFunctT F t γ))
 
+lemma Fubini_lemma {T t γ : ℝ} {f : ℝ → ℂ} (hMeasurable : Measurable f)
+    (h_int : Integrable (fun t => f t * cexp (-(γ * t)))) (hg_Int : Integrable (fun p : ℝ × ℝ => I * cexp ((↑γ + ↑p.1 * I) * ↑t) * cexp (-(↑γ + ↑p.1 * I) * ↑p.2) * f p.2) ((μ_T T).prod μ_real)) :
+    ∫ r in Icc (-T) T, I * cexp ((↑γ + ↑r * I) * ↑t) * ∫ (a : ℝ), cexp (-(↑γ + ↑r * I) * ↑a) * f a ∂μ_real =
+    ∫ (a : ℝ), (∫ r in Icc (-T) T, I * cexp ((↑γ + ↑r * I) * ↑t) * cexp (-(↑γ + ↑r * I) * ↑a) * f a) ∂μ_real := by
+  let g := fun p : ℝ × ℝ => I * cexp ((↑γ + ↑p.1 * I) * ↑t) * cexp (-(↑γ + ↑p.1 * I) * ↑p.2) * f p.2
+  have h_replaceg : ∀ r a : ℝ, I * cexp ((↑γ + ↑r * I) * ↑t) * cexp (-(↑γ + ↑r * I) * ↑a) * f a = g (r, a) := by
+    intros r a; unfold g; ring_nf
 
+  calc
+    ∫ r in Icc (-T) T, I * cexp ((↑γ + ↑r * I) * ↑t) * ∫ (a : ℝ), cexp (-(↑γ + ↑r * I) * ↑a) * f a ∂μ_real =
+    ∫ r in Icc (-T) T, (∫ (a : ℝ), I * cexp ((↑γ + ↑r * I) * ↑t) * cexp (-(↑γ + ↑r * I) * ↑a) * f a ∂μ_real) := by
+      congr; ext r
+      rw [← integral_const_mul (I * cexp ((↑γ + ↑r * I) * ↑t)) (fun a : ℝ => cexp (-(↑γ + ↑r * I) * ↑a) * f a)]
+      congr; ext a; rw [← @NonUnitalRing.mul_assoc]
+    _ = ∫ r in Icc (-T) T, (∫ (a : ℝ), g (r, a) ∂μ_real) := by
+      simp_rw [h_replaceg]
+    _ = ∫ (a : ℝ), (∫ (r : ℝ) in Icc (-T) T, g (r, a)) ∂μ_real := by
+      have hSfinite : MeasureTheory.SFinite μ_real := by
+          unfold μ_real
+          infer_instance
+      rw [integral_integral_swap hg_Int]
 
-theorem IsInverseLaplaceBounded (f: ℝ → ℂ)(γ T: ℝ)(S: Set ℝ)
+lemma integrand_simplification (t γ T : ℝ) (f: ℝ → ℂ) :
+ 1 / (2 * I * ↑π) * ∫ (a : ℝ), I * cexp (↑γ * (↑↑t - ↑a)) * f a * (2 * ↑(Real.sin (T * (↑t - a))) / (↑↑t - ↑a)) ∂μ_real =
+  ∫ (a : ℝ), f a * cexp (-(↑a - ↑↑t) * ↑γ) *  ↑(Real.sin (T * (↑t - a))) / (↑↑t - ↑a)  / ↑π ∂μ_real:= by calc
+  1 / (2 * I * ↑π) * ∫ (a : ℝ), I * cexp (↑γ * (↑↑t - ↑a)) * f a * (2 * ↑(Real.sin (T * (↑t - a))) / (↑↑t - ↑a)) ∂μ_real
+  _= ∫ (a : ℝ), 1 / (2 * I * ↑π) * (I * cexp (↑γ * (↑↑t - ↑a)) * f a * (2 * ↑(Real.sin (T * (↑t - a))) / (↑↑t - ↑a)) )∂μ_real:= by
+    rw[← integral_const_mul]
+  _=∫ (a : ℝ), 1 / (2 * I * ↑π) * (I * cexp (↑γ * (↑↑t - ↑a)) * f a * 2 * ↑(Real.sin (T * (↑t - a))) / (↑↑t - ↑a) )∂μ_real:= by
+    congr
+    ext a
+    ring_nf
+
+  _=∫ (a : ℝ), 1 / (2 * I * ↑π) * (2 *I * cexp (↑γ * (↑↑t - ↑a)) * f a * ↑(Real.sin (T * (↑t - a))) / (↑↑t - ↑a) )∂μ_real:= by
+    congr
+    ext a
+    ring_nf
+
+  _=∫ (a : ℝ),  1 / (2 * I * ↑π) * (2*I) * (cexp (↑γ * (↑↑t - ↑a)) * f a * ↑(Real.sin (T * (↑t - a))) / (↑↑t - ↑a) )∂μ_real:= by
+    congr
+    ext a
+    ring
+  _=∫ (a : ℝ), 1 / (↑π) * (cexp (↑γ * (↑↑t - ↑a)) *   f a * ↑(Real.sin (T * (↑t - a))) / (↑↑t - ↑a) )∂μ_real:= by
+    congr
+    ext a
+    have h_const : 1 / (2 * I * ↑π) * (2 * I) = 1 / ↑π := by
+      -- On fait le calcul sur une petite expression, c'est très rapide
+      field_simp [I_ne_zero, Real.pi_ne_zero]
+    rw[h_const]
+  _=∫ (a : ℝ), f a * cexp (-(↑a - ↑↑t) * ↑γ) *  ↑(Real.sin (T * (↑t - a))) / (↑↑t - ↑a)  / ↑π ∂μ_real:= by
+    congr
+    ext a
+    ring_nf
+
+theorem IsInverseLaplaceBounded  (f: ℝ → ℂ)(γ T: ℝ)(S: Set ℝ)
 {h_cont : Continuous (f)}
 {h_int: Integrable (fun t ↦ (f t )*cexp (-(γ*t)))}
 {hMeasurable: Measurable f}
 {h_Laplace_int: ∀ t∈ S, Integrable ((InverseLaplaceKernelFunctT (RealLaplaceTransform f) t) γ ) volume}
 {h_diff : Differentiable ℝ f}
-{h_diff_int: Integrable (fun t ↦ (deriv f t )*cexp (-γ*t))}:
-∀(t:S), (inverseLaplaceFunctionBounded (RealLaplaceTransform f) γ T S h_Laplace_int) t = ∫r:ℝ , f r *cexp (-(r-t)*γ)*DirichletSin T*(r-t) *R/π ∂μ_real:= by
+{h_diff_int: Integrable (fun t ↦ (deriv f t )*cexp (-γ*t))}
+{hT : 0 ≤ T}:
+∀(t:S), (inverseLaplaceFunctionBounded (RealLaplaceTransform f) γ T S h_Laplace_int) t =  ∫ (a : ℝ), f a * cexp (-(↑a - ↑↑t) * ↑γ) *  ↑(Real.sin (T * (↑t - a))) / (↑↑t - ↑a)  / ↑π ∂μ_real:= by
   unfold inverseLaplaceFunctionBounded
   unfold inverseLaplace_tBounded
   unfold InverseLaplaceKernel
@@ -481,7 +571,6 @@ theorem IsInverseLaplaceBounded (f: ℝ → ℂ)(γ T: ℝ)(S: Set ℝ)
       apply Integrable.const_mul
       rw[← integrable_norm_iff]
       simp_rw [norm_mul, Complex.norm_exp]
-    -- On utilise exp(a + b) = exp(a) * exp(b)
       have h_re : ∀ (a : ℝ), (-(↑γ + ↑r * I) * ↑a).re = -γ * a := by
         intro a
         simp
@@ -523,31 +612,8 @@ theorem IsInverseLaplaceBounded (f: ℝ → ℂ)(γ T: ℝ)(S: Set ℝ)
     apply Measurable.aestronglyMeasurable
     exact hg_meas
 
-  have hFubini:
-    ∫ r in Icc (-T) T, I * cexp ((↑γ + ↑r * I) * ↑↑t) * ∫ (a : ℝ), cexp (-(↑γ + ↑r * I) * ↑a) * f a ∂μ_real=
-    ∫(a : ℝ),( ∫ r in Icc (-T) T, I * cexp ((↑γ + ↑r * I) * ↑↑t) *cexp (-(↑γ + ↑r * I) * ↑a) * f a) ∂μ_real:= by
-    have h_replaceg: ∀ r a: ℝ, I * cexp ((↑γ + (↑r) * I) * (↑↑t))* cexp (-(↑γ + ↑r * I) * ↑a)* f a= g (r,a):= by
-      intros r a; unfold g; ring_nf
-    simp_rw[h_replaceg]
-
-    calc
-    ∫ r in Icc (-T) T, I * cexp ((↑γ + ↑r * I) * ↑↑t) * ∫ (a : ℝ), cexp (-(↑γ + ↑r * I) * ↑a) * f a ∂μ_real=
-    ∫r in Icc (-T) T,( ∫(a : ℝ), I * cexp ((↑γ + ↑r * I) * ↑↑t) *cexp (-(↑γ + ↑r * I) * ↑a) * f a ∂μ_real):= by
-      congr
-      ext r
-      rw[←integral_const_mul (I * cexp ((↑γ + ↑r * I) * ↑↑t)) (fun a:ℝ ↦ cexp (-(↑γ + ↑r * I) * ↑a) * f a)]
-      congr
-      ext a
-      rw[← @NonUnitalRing.mul_assoc]
-    _= ∫r in Icc (-T) T,( ∫(a : ℝ), g (r,a) ∂μ_real):= by
-      simp_rw[h_replaceg]
-
-    _=∫ (a : ℝ), (∫ (r : ℝ) in Icc (-T) T, g (r, a)) ∂μ_real := by
-      have hSfinite : MeasureTheory.SFinite μ_real := by
-          unfold μ_real
-          infer_instance
-      rw [integral_integral_swap hg_Int]
-  simp_rw[hFubini]
+  -- Utilisation du lemme extrait
+  rw [Fubini_lemma hMeasurable h_int hg_Int]
 
   have hOutIntegral: ∀a : ℝ,
   ∫ (r : ℝ) in Icc (-T) T, I * cexp ((↑γ + ↑r * I) * ↑↑t) * cexp (-(↑γ + ↑r * I) * ↑a) * f a=
@@ -574,7 +640,7 @@ theorem IsInverseLaplaceBounded (f: ℝ → ℂ)(γ T: ℝ)(S: Set ℝ)
         _=cexp (↑γ * ↑↑t) * cexp (↑r * I * ↑↑t) * cexp (-↑γ * ↑a) * cexp (-↑r * I * ↑a) := by
           simp
           ring
-        _=cexp (↑γ * ↑↑t) *  cexp (-↑γ * ↑a) *cexp (↑r * I * ↑↑t) * cexp (-↑r * I * ↑a):= by
+        _=cexp (↑γ * ↑↑t) * cexp (-↑γ * ↑a) *cexp (↑r * I * ↑↑t) * cexp (-↑r * I * ↑a):= by
           ring
         _= cexp (↑γ * ↑↑t-↑γ * ↑a) *cexp (↑r * I * ↑↑t) * cexp (-↑r * I * ↑a):= by
           rw [←Complex.exp_add]
@@ -615,141 +681,56 @@ theorem IsInverseLaplaceBounded (f: ℝ → ℂ)(γ T: ℝ)(S: Set ℝ)
       rw[MeasureTheory.integral_const_mul]
     _=I* cexp (↑γ * (↑↑t-↑a)) * f a   * ∫ (r : ℝ) in Icc (-T) T,  cexp (I*↑r * (↑↑t-↑a)):= by
       ring
-  simp_rw[hOutIntegral]
-
-  have hIntExp : ∀ a , ∫ r in Icc (-T) T, cexp (I * r * (t - a))=
-  if t - a = 0 then (2 * T : ℂ) else 2 * Real.sin (T * (t - a)) / (t - a) := by
-      let x := (t - a : ℝ)
-      by_cases hx : x = 0
-      · simp [hx, MeasureTheory.volume_Icc]
-
-        case_absurd =>
-          simp [MeasureTheory.integral_const, MeasureTheory.volume_Icc]
-          ring
-      · simp only [hx, if_false]
-        rw [set_integral_congr_set_integral_Ioc]
-        · rw [integral_exp_cpure_mul_deriv (fun r ↦ I * r * x) (fun r ↦ I * x) _ _]
-          · simp only [mul_comm _ (I * x), intervalIntegral.integral_exp_mul_complex I x]
-            rw [Complex.exp_mul_I, Complex.exp_neg_mul_I]
-            simp only [Complex.ofReal_cos, Complex.ofReal_sin, Complex.ofReal_neg]
-            have hI : I ≠ 0 := I_ne_zero
-            field_simp [hI]
-            ring_nf
-            simp only [Complex.ofReal_sin, Complex.ofReal_mul, Complex.ofReal_ofNat]
-            ring
-          · intro r; apply DifferentiableAt.mul
-            · apply DifferentiableAt.mul <;> (apply differentiableAt_const || apply differentiableAt_id')
-            · apply differentiableAt_const
-        · exact volume_Icc_diff_Ioc
 
 
+  have hOutIntegralTot:
+    ∫ (a : ℝ), (∫ (r : ℝ) in Icc (-T) T, I * cexp ((↑γ + ↑r * I) * ↑↑t) * cexp (-(↑γ + ↑r * I) * ↑a) * f a )∂μ_real =
+    ∫ (a : ℝ),I*cexp (↑γ * (↑↑t-↑a))*f a*(∫ (r : ℝ) in Icc (-T) T,  cexp (I*↑r * (↑↑t-↑a)))∂μ_real := by
+    congr
+    simp_rw[hOutIntegral]
+
+  simp_rw[hOutIntegralTot]
+
+  have h2ndIntegralCalc :
+   ∫ (a : ℝ), I * cexp (↑γ * (↑↑t - ↑a)) * f a *
+   ( ∫ (r : ℝ) in Icc (-T) T, cexp (I * ↑r * (↑↑t - ↑a)) )∂μ_real=
+    ∫ (a : ℝ),I*cexp (↑γ * (↑↑t-↑a))*f a*
+    ( 2 * Real.sin (T * (t - a)) / (t - a))∂μ_real := by
+      apply integral_congr_ae
+      have h_a_neq_t : ∀ (a:ℝ), a ≠ t →
+      (I * cexp (↑γ * (↑↑t - ↑a)) * f a * ∫ (r : ℝ) in Icc (-T) T, cexp (I * ↑r * (↑↑t - ↑a))) =
+      (I * cexp (↑γ * (↑↑t - ↑a)) * f a * (2 * Real.sin (T * (t - a)) / (t - a))) := by
+        intro a  ha_neq_t
+        rw [integral_cexp_Icc_Dirichlet]
+        have: (t : ℝ) - a ≠ 0 := by
+          intro h
+          apply ha_neq_t
+          have: t = a := by
+            have : (t : ℝ) = a := by linarith
+            apply this
+          symm
+          exact this
+        simp [this]
+        apply hT
+      rw [Filter.EventuallyEq, ae_iff]
+      have : NoAtoms μ_real:= by
+        unfold μ_real
+        infer_instance
+
+      refine measure_mono_null ?_ (measure_singleton (t : ℝ))
+      intro a ha_error
+      contrapose! ha_error
+      have h_a_not_eq_t_by_contra : a ≠ t :=by
+        simpa [Set.mem_singleton_iff] using ha_error
+      rw [Set.mem_setOf_eq]
+      have eq := h_a_neq_t a h_a_not_eq_t_by_contra
+      simp [eq]
+
+  simp_rw[h2ndIntegralCalc]
+
+  rw[integrand_simplification t γ T f ]
 
 
-
-
-
-
-
-
-
-
-theorem IsInverseLaplace2 (f: ℝ → ℂ)(γ: ℝ)(S: Set ℝ)
-  {h_cont : Continuous (f)}
-  {h_int: Integrable (f )}
-  {hMeasurable: Measurable f}
-  {h_Laplace_L1 : Integrable (fun T ↦ RealLaplaceTransform f (imNbFromReals γ T)) volume}
-  {h_Laplace_int: ∀ t∈ S, Integrable ((InverseLaplaceKernelFunctT (RealLaplaceTransform f) t) γ ) volume}:
-  ∀(t:S), (inverseLaplaceFunction (RealLaplaceTransform f) γ S h_Laplace_int) t = f t:= by
-    unfold inverseLaplaceFunction
-    unfold inverseLaplace_t
-    unfold InverseLaplaceKernel
-    intro t
-    have hφ_bound :
-      ∃ C : ℝ, ∀ r ∈ Icc (-T) T, ‖φ r‖ ≤ C :=
-    hφ_cont.norm.bound_of_compact isCompact_Icc
-
-  rcases hφ_bound with ⟨C, hC⟩
-    have : ∫ (T : ℝ), I * cexp (imNbFromReals γ T * ↑↑t) *
-    RealLaplaceTransform f (imNbFromReals γ T) =
-          ∫ (T : ℝ), I * cexp (imNbFromReals γ T * ↑↑t)
-           *(∫r,cexp (-(imNbFromReals γ T)*r) * (f r) ∂μ_real):= by
-            congr
-            ext T
-            simp only [neg_mul, mul_eq_mul_left_iff, mul_eq_zero, I_ne_zero, Complex.exp_ne_zero,
-              or_self, or_false]
-            rw[RealLaplaceTransformIs f hMeasurable (imNbFromReals γ  T)]
-            simp only [neg_mul]
-    rw[this]
-    calc  1 / (2 * I * π) *
-    ∫ (T : ℝ), I * cexp (imNbFromReals γ T * ↑↑t) * ∫ (r : ℝ), cexp (-imNbFromReals γ T * ↑r) * f r ∂μ_real
-      _= 1 / (2 * I *π)*∫ (T : ℝ), (∫ (r : ℝ),I* cexp (imNbFromReals γ T * ↑↑t) *  cexp (-imNbFromReals γ T * ↑r) * f r ∂μ_real) :=by
-        congr
-        ext T
-        rw[←integral_const_mul (I * cexp (imNbFromReals γ T * ↑↑t)) (fun r:ℝ ↦ cexp (-imNbFromReals γ T * r) * f r)]
-        congr
-        ext r
-        rw [← @NonUnitalRing.mul_assoc]
-      _=1 / (2 * I *π)*∫ (T : ℝ), (∫ (r : ℝ),I* (cexp (imNbFromReals γ T * ↑↑t) *  cexp (-imNbFromReals γ T * ↑r) * f r) ∂μ_real):=by
-        congr
-        ext T
-        congr
-        ext r
-        ac_rfl
-      _= 1 / (2 * I *π)*∫ (T : ℝ), I*  (∫ (r : ℝ),cexp (imNbFromReals γ T * ↑↑t) *  cexp (-imNbFromReals γ T * ↑r) * f r ∂μ_real):= by
-        congr
-        ext T
-        rw[integral_const_mul I]
-      _=1 / (2 * I *π)*I *∫ (T : ℝ), (∫ (r : ℝ),cexp (imNbFromReals γ T * ↑↑t) *  cexp (-imNbFromReals γ T * ↑r) * f r ∂μ_real):= by
-        rw[integral_const_mul I]
-        ac_rfl
-      _= 1 / (2 *π)*∫ (T : ℝ), (∫ (r : ℝ),cexp (imNbFromReals γ T * ↑↑t) *  cexp (-imNbFromReals γ T * ↑r) * f r ∂μ_real):= by
-        have hI : (I : ℂ) ≠ 0 := I_ne_zero
-        field_simp [hI]
-        ac_rfl
-      _ = 1 / (2 * π) * ∫ (T : ℝ), (∫ (r : ℝ),  cexp ((↑γ + ↑T * I) * ↑↑t) * cexp (-(↑γ + ↑T * I) * ↑r) * f r  ∂μ_real) := by
-        unfold imNbFromReals
-        ring_nf
-      _= 1 / (2 * π) * ∫ (T : ℝ), (∫ (r : ℝ),  cexp ((↑γ + ↑T * I) * ↑↑t- (↑γ + ↑T * I) * ↑r)* f r  ∂μ_real):= by
-        congr
-        ext T
-        congr
-        ext r
-        rw [← Complex.exp_add]
-        ring_nf
-      _=1 / (2 * π) * ∫ (T : ℝ), (∫ (r : ℝ),  cexp ((↑γ + ↑T * I) *(↑↑t-↑r))* f r  ∂μ_real):= by
-        congr
-        ext T
-        congr
-        ext r
-        rw [@mul_sub]
-      _= 1 / (2 * π) * ∫ (T : ℝ), (∫ (r : ℝ),  cexp (↑γ*(↑↑t-↑r) + ↑T *I *(↑↑t-↑r))* f r  ∂μ_real):= by
-        congr
-        ext T
-        congr
-        ext r
-        rw [@NonUnitalNonAssocRing.right_distrib]
-      _=1 / (2 * π) * ∫ (T : ℝ), (∫ (r : ℝ),  cexp (↑γ*(↑↑t-↑r))  *cexp (↑T *I *(↑↑t-↑r))* f r  ∂μ_real):= by
-        congr
-        ext T
-        congr
-        ext r
-        rw [Complex.exp_add]
-      _=1 / (2 * π) * ∫ (r : ℝ), (∫ (T : ℝ),  cexp (↑γ*(↑↑t-↑r))  *cexp (↑T *I *(↑↑t-↑r))* f r ) ∂μ_real:= by
-        have : MeasureTheory.SFinite μ_real := by
-          unfold μ_real
-          infer_instance
-        have hLap := h_Laplace_int t t.property
-        have h_bound : ∀(T r:ℝ), ‖cexp (↑γ * (↑t - ↑r)) * cexp (I * ↑T * (↑t - ↑r)) * f r‖ = ‖cexp (↑γ * (↑t - ↑r)) * f r‖ := by
-          intro T r
-          simp only [Complex.norm_mul]
-          have sec_term_eq1: ‖cexp (I * ↑T * (↑t - ↑r))‖ = 1:=by
-            rw[Complex.norm_exp]
-            simp only [mul_re, I_re, ofReal_re, zero_mul, I_im, ofReal_im, mul_zero, sub_self,
-              sub_re, mul_im, one_mul, zero_add, sub_im, Real.exp_zero]
-          rw[sec_term_eq1]
-          simp only [mul_one]
-        rw [integral_integral_swap]
-        rw [← integrable_norm_iff]
 
 theorem IsInverseLaplace (f: ℝ → ℂ)(γ: ℝ)(S: Set ℝ)
 {h_cont : Continuous (f)}
@@ -830,7 +811,7 @@ theorem IsInverseLaplace (f: ℝ → ℂ)(γ: ℝ)(S: Set ℝ)
       rw [Complex.exp_add]
     _=1 / (2 * π) * ∫ (r : ℝ), (∫ (T : ℝ),  cexp (↑γ*(↑↑t-↑r))  *cexp (↑T *I *(↑↑t-↑r))* f r ) ∂μ_real:= by
       have : MeasureTheory.SFinite μ_real := by
-      unfold μ_real
+    unfold μ_real
       infer_instance
       have hLap := h_Laplace_int t t.property
         have h_bound : ∀(T r:ℝ), ‖cexp (↑γ * (↑t - ↑r)) * cexp (I * ↑T * (↑t - ↑r)) * f r‖ = ‖cexp (↑γ * (↑t - ↑r)) * f r‖ := by
