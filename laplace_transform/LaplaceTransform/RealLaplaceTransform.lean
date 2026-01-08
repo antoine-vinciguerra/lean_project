@@ -17,6 +17,7 @@ import Mathlib.Topology.Instances.Complex
 import Mathlib.Analysis.SpecialFunctions.Exponential
 import Mathlib.Algebra.GroupWithZero.Action.Defs
 import Mathlib.Analysis.Complex.Basic
+import Mathlib.Analysis.Fourier.FourierTransform
 
 import Mathlib.Algebra.Group.Basic
 import Mathlib.Algebra.Group.Semiconj.Defs
@@ -29,7 +30,7 @@ import Mathlib.Analysis.Complex.Exponential
 import Mathlib.Data.Complex.Basic
 import Mathlib.Data.List.Defs
 import Mathlib.Analysis.SpecialFunctions.Integrals.Basic
-
+import Mathlib.Order.Filter.Basic
 /-!
 
 
@@ -204,8 +205,12 @@ section LaplaceInverse
 --In this section we will prove the formula of the inverse Fourier Transform
 -- First we need to define what will be in the integrand
 --the integral sum is defined over the sum of two reals
-def DirichletSin : ℝ → ℝ :=
-  fun x↦ ∫ t in (Icc 0 x), (Real.sin t)/ t
+noncomputable def DirichletSin : ℝ → ℝ :=
+  fun x↦1/2 + 1/π * ∫ t in  (0).. (x), sinc t
+
+noncomputable def HeavisidePerso (x : ℝ) : ℝ :=
+  if x > 0 then 1 else if x = 0 then 1/2 else 0
+
 
 lemma integral_cexp_Icc_Dirichlet
     {T t a : ℝ}
@@ -345,9 +350,75 @@ def inverseLaplaceFunctionBounded (F : ℂ → ℂ) (γ T: ℝ) (S: Set ℝ)
  : S → ℂ :=
  fun t↦ inverseLaplace_tBounded F γ T t
 
+
+theorem limit_inverseLaplace_bounded_eq_full
+  (F : ℂ → ℂ) (γ : ℝ) (S : Set ℝ)
+  (t : S)
+  {h_integrable_in_S : ∀ t∈ S, Integrable ((InverseLaplaceKernelFunctT F t) γ ) volume}
+  :
+  Tendsto (fun T ↦ inverseLaplaceFunctionBounded F γ T S h_integrable_in_S t) atTop (nhds (inverseLaplaceFunction F γ S h_integrable_in_S t)) := by
+    unfold inverseLaplaceFunction
+    unfold inverseLaplaceFunctionBounded
+    unfold inverseLaplace_t
+    unfold inverseLaplace_tBounded
+
+    apply Tendsto.const_mul
+
+  -- We want to prove  ∫_{-T}^{T} f -> ∫_{-∞}^{+∞} f
+
+    let f := fun x ↦ InverseLaplaceKernel F t γ x
+
+
+  --We are changing the integral over an interval to the integral over R with an indicator
+    have eq_indicator : ∀ T, ∫ r in Icc (-T) T, f r = ∫ r, (Icc (-T) T).indicator f r := by
+      intro T
+      rw [integral_indicator (measurableSet_Icc : MeasurableSet (Icc (-T) T))]
+
+    change Tendsto (fun k ↦ ∫ r in Icc (-k) k, f r) atTop (nhds (∫ x, f x))
+
+    simp_rw[eq_indicator]
+    apply tendsto_integral_filter_of_dominated_convergence (fun a ↦ ‖f a‖)
+
+    -- First goal: prove Measurability
+    · have hf : AEStronglyMeasurable f volume := (h_integrable_in_S t t.2).aestronglyMeasurable
+      have hf_indicator: ∀ (T : ℝ), AEStronglyMeasurable ((Icc (-T) T).indicator f) volume:= by
+        intro T
+        apply AEStronglyMeasurable.indicator
+        · exact hf
+        · exact measurableSet_Icc
+      simp[hf_indicator]
+    -- Second goal: prove Domination
+    · have hf_norm: ∀ (T a : ℝ), ‖(Icc (-T) T).indicator f a‖ ≤ ‖f a‖:= by
+        intro T a
+        by_cases ha_in : a ∈ Icc (-T) T
+        · rw [Set.indicator_of_mem ha_in]
+        · rw [Set.indicator_of_notMem ha_in]
+          simp[norm_zero]
+      simp[hf_norm]
+    -- Third goal: prove Integrability
+    · have h_integrable : Integrable f volume := h_integrable_in_S t t.2
+      exact h_integrable.norm
+    -- Fourth goal: prove Limit
+    · apply ae_of_all
+      intro a
+      apply tendsto_const_nhds.congr'
+      filter_upwards [Filter.Ici_mem_atTop ‖a‖]
+      intro n hn
+      have h_le : ‖a‖ ≤ n := by exact mem_Ici.mp hn
+      have ha_in : a ∈ Icc (-n) n := by
+        rw [mem_Icc]
+        constructor
+        · linarith [abs_le.mp h_le]
+        · linarith [abs_le.mp h_le]
+      exact (Set.indicator_of_mem ha_in f).symm
+
+
 theorem inverseLaplaceAdditive_t(F₁: ℂ → ℂ) (F₂: ℂ → ℂ)(γ t : ℝ)
 (h₁ :  Integrable (InverseLaplaceKernelFunctT F₁ t γ ) volume)
-(h₂ : Integrable (InverseLaplaceKernelFunctT F₂ t γ ) volume): inverseLaplace_t (F₁+F₂) γ t = inverseLaplace_t F₁ γ t + inverseLaplace_t F₂ γ t:= by
+(h₂ : Integrable (InverseLaplaceKernelFunctT F₂ t γ ) volume):
+inverseLaplace_t (F₁+F₂) γ t = inverseLaplace_t F₁ γ t + inverseLaplace_t F₂ γ t:= by
+
+
   unfold inverseLaplace_t
   have h_const_ne_zero : (1 / (2 * I * ↑Real.pi) : ℂ) ≠ 0 := by
     simp_all only [one_div, mul_inv_rev, inv_I, ne_eq, neg_eq_zero, mul_eq_zero, inv_eq_zero,
@@ -416,7 +487,7 @@ lemma Fubini_lemma {T t γ : ℝ} {f : ℝ → ℂ} (hMeasurable : Measurable f)
 
 lemma integrand_simplification (t γ T : ℝ) (f: ℝ → ℂ) :
  1 / (2 * I * ↑π) * ∫ (a : ℝ), I * cexp (↑γ * (↑↑t - ↑a)) * f a * (2 * ↑(Real.sin (T * (↑t - a))) / (↑↑t - ↑a)) ∂μ_real =
-  ∫ (a : ℝ), f a * cexp (-(↑a - ↑↑t) * ↑γ) *  ↑(Real.sin (T * (↑t - a))) / (↑↑t - ↑a)  / ↑π ∂μ_real:= by calc
+  ∫ (a : ℝ), f a * cexp (-(↑a - ↑↑t) * ↑γ) *  ↑(Real.sin (T * (↑t - a))) / (↑π*(↑↑t - ↑a)) ∂μ_real:= by calc
   1 / (2 * I * ↑π) * ∫ (a : ℝ), I * cexp (↑γ * (↑↑t - ↑a)) * f a * (2 * ↑(Real.sin (T * (↑t - a))) / (↑↑t - ↑a)) ∂μ_real
   _= ∫ (a : ℝ), 1 / (2 * I * ↑π) * (I * cexp (↑γ * (↑↑t - ↑a)) * f a * (2 * ↑(Real.sin (T * (↑t - a))) / (↑↑t - ↑a)) )∂μ_real:= by
     rw[← integral_const_mul]
@@ -441,20 +512,24 @@ lemma integrand_simplification (t γ T : ℝ) (f: ℝ → ℂ) :
       -- On fait le calcul sur une petite expression, c'est très rapide
       field_simp [I_ne_zero, Real.pi_ne_zero]
     rw[h_const]
-  _=∫ (a : ℝ), f a * cexp (-(↑a - ↑↑t) * ↑γ) *  ↑(Real.sin (T * (↑t - a))) / (↑↑t - ↑a)  / ↑π ∂μ_real:= by
+  _=∫ (a : ℝ), f a * cexp (-(↑a - ↑↑t) * ↑γ) *  ↑(Real.sin (T * (↑t - a))) / (↑π*(↑↑t - ↑a))   ∂μ_real:= by
     congr
     ext a
+    field_simp
     ring_nf
 
+
+
+
 theorem IsInverseLaplaceBounded  (f: ℝ → ℂ)(γ T: ℝ)(S: Set ℝ)
-{h_cont : Continuous (f)}
-{h_int: Integrable (fun t ↦ (f t )*cexp (-(γ*t)))}
-{hMeasurable: Measurable f}
-{h_Laplace_int: ∀ t∈ S, Integrable ((InverseLaplaceKernelFunctT (RealLaplaceTransform f) t) γ ) volume}
-{h_diff : Differentiable ℝ f}
-{h_diff_int: Integrable (fun t ↦ (deriv f t )*cexp (-γ*t))}
-{hT : 0 ≤ T}:
-∀(t:S), (inverseLaplaceFunctionBounded (RealLaplaceTransform f) γ T S h_Laplace_int) t =  ∫ (a : ℝ), f a * cexp (-(↑a - ↑↑t) * ↑γ) *  ↑(Real.sin (T * (↑t - a))) / (↑↑t - ↑a)  / ↑π ∂μ_real:= by
+(h_cont : Continuous (f))
+(h_int: Integrable (fun t ↦ (f t )*cexp (-(γ*t))))
+(hMeasurable: Measurable f)
+(h_Laplace_int: ∀ t∈ S, Integrable ((InverseLaplaceKernelFunctT (RealLaplaceTransform f) t) γ ) volume)
+(h_diff : Differentiable ℝ f)
+(h_diff_int: Integrable (fun t ↦ (deriv f t )*cexp (-γ*t)))
+(hT : 0 ≤ T):
+∀(t:S), (inverseLaplaceFunctionBounded (RealLaplaceTransform f) γ T S h_Laplace_int) t =  ∫ (a : ℝ), f a * cexp (-(↑a - ↑↑t) * ↑γ) *  ↑(Real.sin (T * (↑t - a))) / (↑π*(↑↑t - ↑a))  ∂μ_real:= by
   unfold inverseLaplaceFunctionBounded
   unfold inverseLaplace_tBounded
   unfold InverseLaplaceKernel
@@ -729,104 +804,6 @@ theorem IsInverseLaplaceBounded  (f: ℝ → ℂ)(γ T: ℝ)(S: Set ℝ)
   simp_rw[h2ndIntegralCalc]
 
   rw[integrand_simplification t γ T f ]
-
-
-
-theorem IsInverseLaplace (f: ℝ → ℂ)(γ: ℝ)(S: Set ℝ)
-{h_cont : Continuous (f)}
-{h_int: Integrable (fun t ↦ (f t )*cexp (γ*t))}
-{hMeasurable: Measurable f}
-{h_Laplace_int: ∀ t∈ S, Integrable ((InverseLaplaceKernelFunctT (RealLaplaceTransform f) t) γ ) volume}
-{h_diff : Differentiable ℝ f}
-{h_diff_int: Integrable (fun t ↦ (deriv f t )*cexp (γ*t))}:
-∀(t:S), (inverseLaplaceFunction (RealLaplaceTransform f) γ S h_Laplace_int) t = f t:= by
-  unfold inverseLaplaceFunction
-  unfold inverseLaplace_t
-  unfold InverseLaplaceKernel
-  intro t
-  have : ∫ (T : ℝ), I * cexp (imNbFromReals γ T * ↑↑t) *
-    RealLaplaceTransform f (imNbFromReals γ T) =
-    ∫ (T : ℝ), I * cexp (imNbFromReals γ T * ↑↑t)
-    *(∫r,cexp (-(imNbFromReals γ T)*r) * (f r) ∂μ_real):= by
-      congr
-      ext T
-      simp only [neg_mul, mul_eq_mul_left_iff, mul_eq_zero, I_ne_zero, Complex.exp_ne_zero,
-              or_self, or_false]
-      rw[RealLaplaceTransformIs f hMeasurable (imNbFromReals γ  T)]
-      simp only [neg_mul]
-  rw[this]
-  calc  1 / (2 * I * π) *
-  ∫ (T : ℝ), I * cexp (imNbFromReals γ T * ↑↑t) * ∫ (r : ℝ), cexp (-imNbFromReals γ T * ↑r) * f r ∂μ_real
-    _= 1 / (2 * I *π)*∫ (T : ℝ), (∫ (r : ℝ),I* cexp (imNbFromReals γ T * ↑↑t) *  cexp (-imNbFromReals γ T * ↑r) * f r ∂μ_real) :=by
-      congr
-      ext T
-      rw[←integral_const_mul (I * cexp (imNbFromReals γ T * ↑↑t)) (fun r:ℝ ↦ cexp (-imNbFromReals γ T * r) * f r)]
-      congr
-      ext r
-      rw [← @NonUnitalRing.mul_assoc]
-    _=1 / (2 * I *π)*∫ (T : ℝ), (∫ (r : ℝ),I* (cexp (imNbFromReals γ T * ↑↑t) *  cexp (-imNbFromReals γ T * ↑r) * f r) ∂μ_real):=by
-      congr
-      ext T
-      congr
-      ext r
-      ac_rfl
-    _= 1 / (2 * I *π)*∫ (T : ℝ), I*  (∫ (r : ℝ),cexp (imNbFromReals γ T * ↑↑t) *  cexp (-imNbFromReals γ T * ↑r) * f r ∂μ_real):= by
-      congr
-      ext T
-      rw[integral_const_mul I]
-    _=1 / (2 * I *π)*I *∫ (T : ℝ), (∫ (r : ℝ),cexp (imNbFromReals γ T * ↑↑t) *  cexp (-imNbFromReals γ T * ↑r) * f r ∂μ_real):= by
-      rw[integral_const_mul I]
-      ac_rfl
-    _= 1 / (2 *π)*∫ (T : ℝ), (∫ (r : ℝ),cexp (imNbFromReals γ T * ↑↑t) *  cexp (-imNbFromReals γ T * ↑r) * f r ∂μ_real):= by
-      have hI : (I : ℂ) ≠ 0 := I_ne_zero
-      field_simp [hI]
-      ac_rfl
-    _ = 1 / (2 * π) * ∫ (T : ℝ), (∫ (r : ℝ),  cexp ((↑γ + ↑T * I) * ↑↑t) * cexp (-(↑γ + ↑T * I) * ↑r) * f r  ∂μ_real) := by
-      unfold imNbFromReals
-      ring_nf
-    _= 1 / (2 * π) * ∫ (T : ℝ), (∫ (r : ℝ),  cexp ((↑γ + ↑T * I) * ↑↑t- (↑γ + ↑T * I) * ↑r)* f r  ∂μ_real):= by
-      congr
-      ext T
-      congr
-      ext r
-      rw [← Complex.exp_add]
-      ring_nf
-    _=1 / (2 * π) * ∫ (T : ℝ), (∫ (r : ℝ),  cexp ((↑γ + ↑T * I) *(↑↑t-↑r))* f r  ∂μ_real):= by
-      congr
-      ext T
-      congr
-      ext r
-      rw [@mul_sub]
-    _= 1 / (2 * π) * ∫ (T : ℝ), (∫ (r : ℝ),  cexp (↑γ*(↑↑t-↑r) + ↑T *I *(↑↑t-↑r))* f r  ∂μ_real):= by
-      congr
-      ext T
-      congr
-      ext r
-      rw [@NonUnitalNonAssocRing.right_distrib]
-    _=1 / (2 * π) * ∫ (T : ℝ), (∫ (r : ℝ),  cexp (↑γ*(↑↑t-↑r))  *cexp (↑T *I *(↑↑t-↑r))* f r  ∂μ_real):= by
-      congr
-      ext T
-      congr
-      ext r
-      rw [Complex.exp_add]
-    _=1 / (2 * π) * ∫ (r : ℝ), (∫ (T : ℝ),  cexp (↑γ*(↑↑t-↑r))  *cexp (↑T *I *(↑↑t-↑r))* f r ) ∂μ_real:= by
-      have : MeasureTheory.SFinite μ_real := by
-    unfold μ_real
-      infer_instance
-      have hLap := h_Laplace_int t t.property
-        have h_bound : ∀(T r:ℝ), ‖cexp (↑γ * (↑t - ↑r)) * cexp (I * ↑T * (↑t - ↑r)) * f r‖ = ‖cexp (↑γ * (↑t - ↑r)) * f r‖ := by
-          intro T r
-          simp only [Complex.norm_mul]
-          have sec_term_eq1: ‖cexp (I * ↑T * (↑t - ↑r))‖ = 1:=by
-            rw[Complex.norm_exp]
-            simp only [mul_re, I_re, ofReal_re, zero_mul, I_im, ofReal_im, mul_zero, sub_self,
-              sub_re, mul_im, one_mul, zero_add, sub_im, Real.exp_zero]
-          rw[sec_term_eq1]
-          simp only [mul_one]
-        rw [integral_integral_swap]
-        rw [← integrable_norm_iff]
-
-
 
 
 end LaplaceInverse
