@@ -27,11 +27,16 @@ import Mathlib.Algebra.Group.Commute.Defs
 import LaplaceTransform.LaplaceTransformDef
 import Mathlib.MeasureTheory.Measure.Complex
 import Mathlib.Analysis.Complex.Exponential
+import Mathlib.Order.Filter.Prod
 
 import Mathlib.Data.Complex.Basic
 import Mathlib.Data.List.Defs
 import Mathlib.Analysis.SpecialFunctions.Integrals.Basic
 import Mathlib.Order.Filter.Basic
+
+import Mathlib.Analysis.Asymptotics.Defs
+import Mathlib.Analysis.Asymptotics.Lemmas
+import Mathlib.Analysis.Asymptotics.SpecificAsymptotics
 /-! # The Dirichlet Integral
 -/
 
@@ -51,39 +56,250 @@ open Complex
 noncomputable def DirichletSin : ℝ → ℝ :=
   fun x↦1/2 + 1/π * ∫ t in  (0).. (x), sinc t
 
+def Dirichlet_Val : ℝ := lim (atTop.map (fun T ↦ ∫ t in (0)..T, sinc t))
+
 noncomputable def HeavisidePerso (x : ℝ) : ℝ :=
   if x > 0 then 1 else if x = 0 then 1/2 else 0
 
 
-def sin_div_times_exp (t : ℝ) : ℝ → ℝ := fun x ↦ Real.exp (-x * t) * (Real.sin t / t)
-
-def neg_sin_times_exp (t : ℝ) : ℝ → ℝ := fun x ↦ -Real.sin t * Real.exp (-x * t)
-def integral_sin_div_times_exp_eps (ε : ℝ)(h_ε : ε>0): ℝ → ℝ  := fun x ↦ ∫ t in Ioi ε , sin_div_times_exp t x
-
-def integral_sin_div_times_exp (x: ℝ) : ℝ  := ∫ t in Ioi 0 , sin_div_times_exp t x
-
-lemma sin_div_times_exp_le_exp (t : ℝ) (ht : 0 < t):
-∀ x, ‖sin_div_times_exp t x‖ ≤ Real.exp (-x * t):= by
-  intro x
-  unfold sin_div_times_exp
-  rw [norm_mul]
-  have:  ‖rexp (-x * t)‖= rexp (-x * t):= by
+lemma integrable_sinc_sq : IntegrableOn (fun (t:ℝ) => (sinc t)^2) (Ioi 0) := by
+  let s1 : Set ℝ := Ioc 0 1
+  let s2 : Set ℝ := Ioi 1
+  have h_union : Ioi 0 = s1 ∪ s2 := (Ioc_union_Ioi_eq_Ioi (by norm_num)).symm
+  have integrable_s1: IntegrableOn (fun t ↦ sinc t ^ 2) s1 volume:= by
+    rw[← intervalIntegrable_iff_integrableOn_Ioc_of_le ]
+    apply Continuous.intervalIntegrable
+    have h_cont : Continuous (fun t ↦ sinc t ^ 2) := continuous_sinc.pow 2
+    exact h_cont
     simp
+  have integrable_s2: IntegrableOn (fun t ↦ sinc t ^ 2) s2 volume:= by
+    unfold s2
+    have h_int_inv_sq : IntegrableOn (fun (t:ℝ) => 1 / t^(2:ℝ)) s2 volume := by
+      have : (fun t: ℝ ↦(1:ℝ) / t^(2:ℝ)) = fun t: ℝ ↦ (t^(-2: ℝ)):= by
+        funext t
+        simp
+        rfl
+      simp_rw[this]
+      rw [integrableOn_Ioi_rpow_iff (zero_lt_one : 0 < (1 : ℝ))]
+      norm_num
+    apply MeasureTheory.Integrable.mono h_int_inv_sq
+    · apply (continuous_sinc.pow 2).continuousOn.aestronglyMeasurable
+      exact measurableSet_Ioi
+    · rw [ae_restrict_iff' measurableSet_Ioi]
+      refine Filter.Eventually.of_forall (fun t ht_mem => ?_)
+      unfold sinc
+      rw [mem_Ioi] at ht_mem
+      simp [(by linarith : t ≠ 0)]
+      have h_pos : 0 < t := by linarith
+      have h_t2_pos : 0 < t^2 := by positivity
+      have h_t2_abs_eq_t2: |t ^ 2|=t^2 := by
+        rw [abs_of_nonneg]
+        exact h_t2_pos.le
+      rw [div_pow, ←abs_pow, ←abs_pow]
+      rw[h_t2_abs_eq_t2]
+      simp
+      field_simp
+      rw [← sq_abs (Real.sin t)]
+      rw[← one_pow 2]
+      simp[pow_le_pow_iff_left ]
+      rw[abs_le]
+      constructor
+      exact Real.neg_one_le_sin t
+      exact Real.sin_le_one t
+  have:= IntegrableOn.union integrable_s1 integrable_s2
+  rw[← h_union] at this
+  exact this
+
+lemma deriv_sin_sq (t : ℝ) : HasDerivAt (fun x => Real.sin x ^ 2) (Real.sin (2 * t)) t := by
+  have h := (Real.hasDerivAt_sin t).pow 2
+  simp at h
+  rw [← Real.sin_two_mul] at h
+  exact h
+
+lemma deriv_neg_inv {t : ℝ} (ht : t ≠ 0) : HasDerivAt (fun x => -1 / x) (1 / t ^ 2) t := by
+  have h :=  (hasDerivAt_inv ht).neg
+  field_simp at h
+  have neg_inside: (-fun y:ℝ ↦ 1 / y)= (fun y:ℝ ↦ -1 / y):= by
+    funext x
+    simp
+    field_simp
+  rw[neg_inside] at h
+  exact h
+
+lemma integral_sinc_sq_eq_dirichlet_bounded {a T : ℝ} (ha : 0 < a) (hT : a ≤ T) :
+    ∫ t in a..T, (Real.sinc t)^2 =
+    ((Real.sinc a)^2 * a -(Real.sinc T)^2   * T) + ∫ t in a..T, Real.sin (2 * t) / t := by
+    unfold sinc
+
+    have h_sinc_eq : ∀ t ∈ Set.uIcc a T, (if t = 0 then 1 else Real.sin t / t) = Real.sin t / t := by
+      intro t ht
+      have : t ≠ 0 := by
+        rw [Set.uIcc_of_le hT] at ht
+        linarith [ha, ht.1]
+      split_ifs with h_cond
+      · contradiction
+      · rfl
+    rw[h_sinc_eq]
+    rw[h_sinc_eq]
+
+    have : ∫ (t : ℝ) in a..T, (if t = 0 then 1 else Real.sin t / t) ^ 2
+     =∫ (t : ℝ) in a..T, ( Real.sin t / t) ^ 2:= by
+      apply intervalIntegral.integral_congr
+      intro t ht
+      have h_val := h_sinc_eq t ht
+      simp [h_val]
+    rw[this]
+
+
+    let u := fun t => Real.sin t ^ 2
+    let v := fun t: ℝ  => -1 / t
+    let u' := fun t => Real.sin (2 * t)
+    let v' := fun t: ℝ  => 1 / t ^ 2
+    have h_left : ∫ t in a..T, (Real.sin t / t )^2 = ∫ t in a..T, u t * v' t := by
+      apply intervalIntegral.integral_congr
+      intro t _
+      field_simp [u, v']
+      ring
+    rw [h_left]
+
+    have h_deriv_u : ∀ x ∈ uIcc a T, HasDerivAt u (u' x) x:= by
+      unfold u u'
+      intro x hx
+      exact deriv_sin_sq x
+    have h_deriv_v : ∀ x ∈ uIcc a T, HasDerivAt v (v' x) x:= by
+      unfold v v'
+      intro x hx
+      rw [uIcc_of_le hT] at hx
+      have hx_neq0 : x ≠ 0 := by
+       exact ne_of_gt (ha.trans_le hx.1)
+      exact deriv_neg_inv hx_neq0
+    have hu'_integrable : IntervalIntegrable u' volume a T:= by
+      unfold u'
+      apply ContinuousOn.intervalIntegrable
+      fun_prop
+    have hv'_integrable :IntervalIntegrable v' volume a T:= by
+      unfold v'
+      apply ContinuousOn.intervalIntegrable
+      have : ∀ x ∈ Icc a T, x ^ 2 ≠ 0:= by
+        intro x hx
+        have hx_neq0 : x ≠ 0 := by
+          exact ne_of_gt (ha.trans_le hx.1)
+        exact pow_ne_zero 2 hx_neq0
+      apply ContinuousOn.div
+      fun_prop
+      fun_prop
+      rw [uIcc_of_le hT]
+      exact this
+
+
+    rw [intervalIntegral.integral_mul_deriv_eq_deriv_mul h_deriv_u h_deriv_v hu'_integrable hv'_integrable]
+    unfold u v u'
+    field_simp
+    simp
+    ring
+    simp
+    simp
+
+lemma sinc_bounded_change_interval{a T : ℝ} (ha : 0 < a) (hT : a ≤ T) : (∫ t in a..T, Real.sin (2 * t) / t)= ∫ t in (2*a).. (2*T), Real.sinc t := by
+  let f:= fun t ↦ Real.sin (t) / (t)
+
+  have : (∫ t in a..T, Real.sin (2 * t) / t)= 2*(∫ t in a..T, f (2 * t)):= by
+    unfold f
+    rw[← intervalIntegral.integral_const_mul]
+    congr
+    funext t
+    field_simp
   rw[this]
-  apply mul_le_of_le_one_right (exp_pos _).le
-  have : sinc t= Real.sin t / t := by
-    have h_t_neq_0:  t ≠ 0:= by
-      exact ht.ne'
-    exact Real.sinc_of_ne_zero h_t_neq_0
-  rw[← this]
+  rw [intervalIntegral.integral_comp_mul_left]
+  simp
+  unfold f
+  apply intervalIntegral.integral_congr
+  intro t ht
+  simp
+  have h2T: 2*a ≤ 2*T := by linarith
+  have h : t ≠ 0 := by
+    rw [Set.uIcc_of_le h2T] at ht
+    linarith [ha, ht.1]
+  unfold sinc
+  simp[h]
+  simp
 
-  rw[ Real.norm_eq_abs]
-  simp[Real.abs_sinc_le_one]
+lemma limit_sinc_sq_mul_self_zero :
+    Tendsto (fun a => (Real.sinc a)^2 * a) (nhdsWithin 0 (Set.Ioi 0)) (nhds 0) := by
+  have h_cont : ContinuousAt (fun a => (Real.sinc a)^2 * a) 0 := by
+    fun_prop
+  have h_lim : Tendsto (fun a => (Real.sinc a)^2 * a) (nhdsWithin 0 (Set.Ioi 0)) (nhds 0) := by
+    have h_val : (Real.sinc 0)^2 * 0 = 0 := by simp
+    rw [← h_val]
+    apply Tendsto.mono_left
+    · exact h_cont.tendsto
+    · simp
+      exact nhdsWithin_le_nhds
+  exact h_lim
+lemma limit_sinc_sq_mul_self_atTop :
+    Tendsto (fun T => (Real.sinc T)^2 * T) atTop (nhds 0) := by
+    have h_eq : ∀ᶠ T in atTop, (Real.sinc T)^2 * T = (Real.sin T)^2 / T := by
+      filter_upwards [eventually_gt_atTop 0] with T hT
+      unfold Real.sinc
+      simp [hT.ne.symm]
+      field_simp
+    rw [tendsto_congr' h_eq]
+    apply tendsto_of_tendsto_of_tendsto_of_le_of_le'
+    · exact tendsto_const_nhds
+    · exact tendsto_inv_atTop_zero
+    · filter_upwards [eventually_gt_atTop 0] with x hx
+      positivity
+    · filter_upwards [eventually_gt_atTop 0] with x hx
+      field_simp
+      rw [← sq_abs (Real.sin x)]
+      rw[← one_pow 2]
+      simp[pow_le_pow_iff_left ]
+      rw[abs_le]
+      constructor
+      exact Real.neg_one_le_sin x
+      exact Real.sin_le_one x
 
-lemma hasDeriv_sin_div_times_exp(t : ℝ) (ht : 0 < t):
-  ∀a: ℝ ,HasDerivAt (sin_div_times_exp t) (neg_sin_times_exp t a) a:= by
-    unfold neg_sin_times_exp
-    unfold sin_div_times_exp
+lemma integral_sinc_sq_eq_dirichlet_bounded' {a T : ℝ} (ha : 0 < a) (hT : a ≤ T) :
+  (∫ t in a.. T, Real.sinc t)= (∫ t in a/2..T/2, (Real.sinc t)^2) -(Real.sinc (a/2))^2 * (a/2) +(Real.sinc (T/2))^2*(T/2):= by
+  have h_a_div_2: 0 < a/2:= by linarith
+  have h_T_div_2: a/2 ≤ T/2:= by linarith
+  have h := sinc_bounded_change_interval h_a_div_2 h_T_div_2
+  field_simp at h
+  rw[← h]
+  have h_new :=
+  integral_sinc_sq_eq_dirichlet_bounded h_a_div_2 h_T_div_2
+
+
+  let f:=  sinc (a / 2) ^ 2 * (a / 2) - sinc (T / 2) ^ 2 * (T / 2)
+  let g:=   ∫ (t : ℝ) in a / 2..T / 2, Real.sin (2 * t) / t
+  have: sinc (a / 2) ^ 2 * (a / 2) - sinc (T / 2) ^ 2 * (T / 2) + ∫ (t : ℝ) in a / 2..T / 2, Real.sin (2 * t) / t= f+g:= by
+    unfold f g
+    field_simp
+  rw[this] at h_new
+  have h_rewritten : g=(∫ (t : ℝ) in a / 2..T / 2, sinc t ^ 2) - f  := by
+    rw [h_new]
+    ring
+
+  unfold f g at h_rewritten
+  rw[h_rewritten]
+  ring
+
+def sinc_sq_times_exp (t : ℝ) : ℝ → ℝ := fun x ↦ Real.exp (-x * t) * (Real.sinc t)^2
+
+def neg_sinc_sq_times_id_exp (t : ℝ) : ℝ → ℝ := fun x ↦ -(Real.sinc t)^2  *t* Real.exp (-x * t)
+
+def sin_sq_times_exp (t : ℝ) : ℝ → ℝ := fun x ↦ (Real.sin t)^2 * Real.exp (-x * t)
+
+def integral_sinc_sq_times_exp (x: ℝ) : ℝ  := ∫ t in Ioi 0 , sinc_sq_times_exp t x
+
+def integral_neg_sinc_sq_times_id_exp (x: ℝ) : ℝ  := ∫ t in Ioi 0 , neg_sinc_sq_times_id_exp t x
+
+def integral_sin_sq_times_exp(x: ℝ) : ℝ  := ∫ t in Ioi 0 , sin_sq_times_exp t x
+
+lemma hasDeriv_sinc_sq_times_exp(t : ℝ) (ht : 0 < t):
+  ∀a: ℝ ,HasDerivAt (sinc_sq_times_exp t) (neg_sinc_sq_times_id_exp t a) a:= by
+    unfold sinc_sq_times_exp
+    unfold neg_sinc_sq_times_id_exp
     intro a
     have h_inner : HasDerivAt (fun x => -x * t) (-t) a := by
       simpa using hasDerivAt_id a |>.neg |>.mul_const t
@@ -91,13 +307,39 @@ lemma hasDeriv_sin_div_times_exp(t : ℝ) (ht : 0 < t):
     have h_exp : HasDerivAt (fun x => Real.exp (-x * t)) (-t * Real.exp (-a * t)) a := by
       convert h_inner.exp using 1
       ring
-    convert h_exp.mul_const (Real.sin t / t) using 1
+
+    convert h_exp.mul_const ((Real.sinc t)^2) using 1
+    unfold sinc
+    split_ifs with h_zero
+    · linarith
+    · field_simp
+
+lemma hasDeriv_neg_sinc_sq_times_id_exp(t : ℝ) (ht : 0 < t):
+  ∀a: ℝ ,HasDerivAt (neg_sinc_sq_times_id_exp t) (sin_sq_times_exp t a) a:= by
+    unfold sin_sq_times_exp
+    unfold neg_sinc_sq_times_id_exp
+    intro a
+    have h_inner : HasDerivAt (fun x => -x * t) (-t) a := by
+      simpa using hasDerivAt_id a |>.neg |>.mul_const t
+
+    have h_exp : HasDerivAt (fun x => Real.exp (-x * t)) (-t * Real.exp (-a * t)) a := by
+      convert h_inner.exp using 1
+      ring
+
+    convert h_exp.mul_const (-(Real.sinc t)^2*t) using 1
+    unfold sinc
+    split_ifs with h_zero
+    · linarith
+    · field_simp
+    unfold sinc
+    have: t≠ 0:= by linarith
+    simp[this]
     field_simp
 
-lemma neg_sin_times_exp_le_exp (t: ℝ):
-  ∀ x, ‖neg_sin_times_exp t x‖ ≤ Real.exp (-x * t):= by
+lemma neg_sinc_sq_times_id_exp_le_exp (t: ℝ):
+  ∀ x, ‖neg_sinc_sq_times_id_exp t x‖ ≤ Real.exp (-x * t):= by
   intro x
-  unfold neg_sin_times_exp
+  unfold neg_sinc_sq_times_id_exp
   rw [norm_mul]
   have:  ‖rexp (-x * t)‖= rexp (-x * t):= by
     simp
@@ -108,70 +350,119 @@ lemma neg_sin_times_exp_le_exp (t: ℝ):
     simp[h_exp_pos.le]
   have: rexp (-(x * t))= rexp (-x * t):= by
     simp
+
   rw[ this] at h_exp_pos_le
+
   exact h_exp_pos_le
-  simp only [norm_neg, norm_eq_abs]
-  simp[abs_sin_le_one]
+  simp only [norm_neg, norm_eq_abs, norm_mul]
+  by_cases h : |t| ≤ 1
+  · have h_sinc : |Real.sinc t| ≤ 1 := Real.abs_sinc_le_one t
+    have h_sinc2 : |Real.sinc t ^ 2|≤ 1 := by
+      simp
+      exact h_sinc
+    have abs_t_val:= abs_nonneg t
+    calc |Real.sinc t ^ 2| * |t|
+    _ ≤ 1 * |t| := by
+      apply mul_le_mul_of_nonneg_right  h_sinc2 abs_t_val
+    _ ≤ 1  := by simp [h]
 
 
-theorem hasDeriv_integral_sin_div_times_exp (x : ℝ) (hx : 0 < x) :
-    HasDerivAt (integral_sin_div_times_exp) (- ∫ t in Ioi 0, Real.sin t * Real.exp (-x * t)) x := by
+  · have :t≠ 0:= by
+      intro ht_zero
+      push_neg at h
+      rw [ht_zero, abs_zero] at h
+      have: ¬((1:ℝ)<0) := by linarith
+      exact absurd h this
+    unfold sinc
+    simp[this]
+    rw [div_pow, ← sq_abs (a:= t)]
+    field_simp
+    have h_sin : |Real.sin t| ≤ 1 := Real.abs_sin_le_one t
+    have h_sin2 : Real.sin t ^ 2≤ 1 := by
+      simp
+      exact h_sin
+    push_neg at h
+    exact h_sin2.trans h.le
+
+lemma sin_sq_times_exp_le_exp(t: ℝ):
+   ∀ x, ‖sin_sq_times_exp t x‖ ≤ Real.exp (-x * t):= by
+  intro x
+  unfold sin_sq_times_exp
+  rw [norm_mul]
+  have:  ‖rexp (-x * t)‖= rexp (-x * t):= by
+    simp
+  rw[this]
+  apply mul_le_of_le_one_left
+  have h_exp_pos_le:  0 ≤ rexp (-(x * t)):= by
+    have h_exp_pos : 0 < Real.exp (-(x * t)) := Real.exp_pos (-(x * t))
+    simp[h_exp_pos.le]
+  have: rexp (-(x * t))= rexp (-x * t):= by
+    simp
+
+  rw[ this] at h_exp_pos_le
+
+  exact h_exp_pos_le
+  simp
+  simp[Real.abs_sin_le_one]
+
+theorem hasDeriv_integral_sinc_sq_times_exp (x : ℝ) (hx : 0 < x) :
+    HasDerivAt (integral_sinc_sq_times_exp) (integral_neg_sinc_sq_times_id_exp x) x := by
   classical
+
   have h_deriv :∀ t ∈ Ioi 0,
       HasDerivAt
-        (fun x => sin_div_times_exp t x)
-        (neg_sin_times_exp t x)
+        (fun x => sinc_sq_times_exp t x)
+        (neg_sinc_sq_times_id_exp t x)
         x :=
   by
     intro t ht
     have ht_gt0 : t > 0 := by
       apply mem_Ioi.mp ht
-    exact hasDeriv_sin_div_times_exp t ht_gt0 x
+    exact hasDeriv_sinc_sq_times_exp t ht_gt0 x
 
-  have hF_AEmeas : ∀ᶠ x' in nhds x, AEStronglyMeasurable (fun t => sin_div_times_exp t x') (volume.restrict (Ioi 0)) := by
+  have hF_AEmeas : ∀ᶠ x' in nhds x, AEStronglyMeasurable (fun t => sinc_sq_times_exp t x') (volume.restrict (Ioi 0)) := by
     apply Filter.Eventually.of_forall
     intro x'
-    unfold sin_div_times_exp
+    unfold sinc_sq_times_exp
     apply ContinuousOn.aestronglyMeasurable
     · apply ContinuousOn.mul
       apply Continuous.continuousOn
       have: Continuous (fun x ↦ -x' * x):= by
         continuity
       apply Continuous.rexp this
-      apply ContinuousOn.div
       apply Continuous.continuousOn
-      continuity
-      apply Continuous.continuousOn
-      continuity
-      intro t ht
-      rw [mem_Ioi] at ht
-      exact ht.ne'
+      exact Real.continuous_sinc.pow 2
     · exact measurableSet_Ioi
 
-  have h_int_x :
-    IntegrableOn (fun t => Real.exp (-x * t)) (Ioi 0) volume :=
-  by
-    have h_neg : -x < 0 := by linarith [hx]
-    exact integrableOn_exp_mul_Ioi h_neg 0
+  have h_int_sinc_sq := integrable_sinc_sq
 
-  have hF_int : Integrable (fun t => sin_div_times_exp t x) (volume.restrict (Ioi 0)) :=by
-    apply MeasureTheory.Integrable.mono h_int_x
+  have hF_int : Integrable (fun t => sinc_sq_times_exp t x) (volume.restrict (Ioi 0)) :=by
+    apply MeasureTheory.Integrable.mono h_int_sinc_sq
     · exact hF_AEmeas.self_of_nhds
     · rw [ae_restrict_iff' measurableSet_Ioi]
       refine Filter.Eventually.of_forall (fun t ht_mem => ?_)
+      unfold sinc_sq_times_exp
+      simp only [neg_mul, norm_eq_abs, abs_mul]
+      simp
+      apply mul_le_of_le_one_left (pow_two_nonneg _)
+
       have ht_pos : 0 < t := by
         rw [mem_Ioi] at ht_mem
         exact ht_mem
-      have : ‖rexp (-x * t)‖= rexp (-x * t):= by
-        simp only [neg_mul, norm_eq_abs, abs_exp]
-      rw[this]
-      exact sin_div_times_exp_le_exp t ht_pos x
 
-  have hF'_meas : MeasureTheory.AEStronglyMeasurable (fun t => neg_sin_times_exp t x) (volume.restrict (Ioi 0)) := by
-    unfold neg_sin_times_exp
+      have : rexp (-(x * t))≤ 1:= by
+        simp[ht_pos]
+        exact hx.le
+      exact this
+
+  have hF'_meas : MeasureTheory.AEStronglyMeasurable (fun t => neg_sinc_sq_times_id_exp t x) (volume.restrict (Ioi 0)) := by
+    unfold neg_sinc_sq_times_id_exp
     apply ContinuousOn.aestronglyMeasurable
     · apply ContinuousOn.mul
       apply Continuous.continuousOn
+      apply Continuous.mul
+      apply Continuous.neg
+      exact continuous_sinc.pow 2
       continuity
       apply Continuous.continuousOn
       have: Continuous (fun x' ↦ -x * x'):= by
@@ -187,15 +478,15 @@ theorem hasDeriv_integral_sin_div_times_exp (x : ℝ) (hx : 0 < x) :
   let bound_func := fun t => Real.exp (-r * t)
 
   have h_bound : ∀ᵐ t ∂volume.restrict (Ioi 0), ∀ x' ∈ Metric.ball x r,
-      ‖neg_sin_times_exp t x'‖ ≤ bound_func t := by
+      ‖neg_sinc_sq_times_id_exp t x'‖ ≤ bound_func t := by
     rw [ae_restrict_iff' measurableSet_Ioi]
     refine Filter.Eventually.of_forall (fun t ht_mem x' hx' => ?_)
     have ht_pos : 0 < t := by
       rw[mem_Ioi] at ht_mem
       exact ht_mem
     unfold bound_func
-    have  first_ineq: ‖ neg_sin_times_exp t x'‖≤ rexp (-x' * t) := by
-      exact neg_sin_times_exp_le_exp t x'
+    have  first_ineq: ‖ neg_sinc_sq_times_id_exp t x'‖≤ rexp (-x' * t) := by
+      exact neg_sinc_sq_times_id_exp_le_exp t x'
     have second_ineq : rexp (-x' * t) ≤ rexp (-r * t):= by
       apply Real.exp_le_exp.mpr
       apply mul_le_mul_of_nonneg_right
@@ -216,138 +507,300 @@ theorem hasDeriv_integral_sin_div_times_exp (x : ℝ) (hx : 0 < x) :
     apply (integrableOn_exp_mul_Ioi (by linarith) 0).integrable
 
   have h_diff : ∀ᵐ t ∂volume.restrict (Ioi 0), ∀ x' ∈ Metric.ball x r,
-      HasDerivAt (fun x_param => sin_div_times_exp t x_param) (neg_sin_times_exp t x') x' := by
+      HasDerivAt (fun x_param => sinc_sq_times_exp t x_param) (neg_sinc_sq_times_id_exp t x') x' := by
     rw [ae_restrict_iff' measurableSet_Ioi]
     refine Filter.Eventually.of_forall (fun t ht_mem x' _ => ?_)
     have ht_pos : 0 < t := by
       rw[mem_Ioi] at ht_mem
       exact ht_mem
-    exact hasDeriv_sin_div_times_exp t ht_pos x'
+    exact hasDeriv_sinc_sq_times_exp t ht_pos x'
+
   have h_final := hasDerivAt_integral_of_dominated_loc_of_deriv_le
     hr hF_AEmeas hF_int hF'_meas h_bound h_bound_int h_diff
-  have : (fun t => neg_sin_times_exp t x) = (fun t => - (Real.sin t * Real.exp (-x * t))) := by
-    ext t
-    unfold neg_sin_times_exp
-    ring
-  rw [this] at h_final
-  rw [integral_neg] at h_final
+
+  unfold integral_sinc_sq_times_exp integral_neg_sinc_sq_times_id_exp
   exact h_final.2
 
+theorem hasDeriv_integral_neg_sinc_sq_times_id_exp (x : ℝ) (hx : 0 < x) :
+    HasDerivAt (integral_neg_sinc_sq_times_id_exp) (integral_sin_sq_times_exp x) x := by
+  classical
+
+  have h_deriv :∀ t ∈ Ioi 0,
+      HasDerivAt
+        (fun x => neg_sinc_sq_times_id_exp t x)
+        (sin_sq_times_exp t x)
+        x :=
+  by
+    intro t ht
+    have ht_gt0 : t > 0 := by
+      apply mem_Ioi.mp ht
+
+    exact hasDeriv_neg_sinc_sq_times_id_exp t ht_gt0 x
+
+
+  have hF_AEmeas : ∀ᶠ x' in nhds x, AEStronglyMeasurable (fun t => neg_sinc_sq_times_id_exp t x') (volume.restrict (Ioi 0)) := by
+    apply Filter.Eventually.of_forall
+    intro x'
+    unfold neg_sinc_sq_times_id_exp
+    apply ContinuousOn.aestronglyMeasurable
+    · apply ContinuousOn.mul
+      apply Continuous.continuousOn
+      apply Continuous.mul
+      apply Continuous.neg
+      exact Real.continuous_sinc.pow 2
+      continuity
+      have: Continuous (fun x ↦ -x' * x):= by
+        continuity
+      apply Continuous.continuousOn
+      apply Continuous.rexp this
+    · exact measurableSet_Ioi
+
+  have h_int_x :
+    IntegrableOn (fun t => Real.exp (-x * t)) (Ioi 0) volume :=
+  by
+    have h_neg : -x < 0 := by linarith [hx]
+    exact integrableOn_exp_mul_Ioi h_neg 0
+
+  have hF_int : Integrable (fun t => neg_sinc_sq_times_id_exp  t x) (volume.restrict (Ioi 0)) :=by
+    apply MeasureTheory.Integrable.mono h_int_x
+    · exact hF_AEmeas.self_of_nhds
+    · rw [ae_restrict_iff' measurableSet_Ioi]
+      refine Filter.Eventually.of_forall (fun t ht_mem => ?_)
+      have ht_pos : 0 < t := by
+        rw [mem_Ioi] at ht_mem
+        exact ht_mem
+      have : ‖rexp (-x * t)‖= rexp (-x * t):= by
+        simp only [neg_mul, norm_eq_abs, abs_exp]
+      rw[this]
+
+      exact neg_sinc_sq_times_id_exp_le_exp t x
+
+  have hF'_meas : MeasureTheory.AEStronglyMeasurable (fun t => sin_sq_times_exp t x) (volume.restrict (Ioi 0)) := by
+    unfold sin_sq_times_exp
+    apply ContinuousOn.aestronglyMeasurable
+    · apply ContinuousOn.mul
+      apply Continuous.continuousOn
+      exact continuous_sin.pow 2
+      apply Continuous.continuousOn
+      have: Continuous (fun x' ↦ -x * x'):= by
+        continuity
+      apply Continuous.rexp this
+    · exact measurableSet_Ioi
+
+  let r := x / 2
+  have hr : r > 0 := by
+    unfold r
+    simp[hx]
+
+  let bound_func := fun t => Real.exp (-r * t)
+
+  have h_bound : ∀ᵐ t ∂volume.restrict (Ioi 0), ∀ x' ∈ Metric.ball x r,
+      ‖sin_sq_times_exp t x'‖ ≤ bound_func t := by
+    rw [ae_restrict_iff' measurableSet_Ioi]
+    refine Filter.Eventually.of_forall (fun t ht_mem x' hx' => ?_)
+    have ht_pos : 0 < t := by
+      rw[mem_Ioi] at ht_mem
+      exact ht_mem
+    unfold bound_func
+    have  first_ineq: ‖ sin_sq_times_exp t x'‖≤ rexp (-x' * t) := by
+      exact sin_sq_times_exp_le_exp t x'
+    have second_ineq : rexp (-x' * t) ≤ rexp (-r * t):= by
+      apply Real.exp_le_exp.mpr
+      apply mul_le_mul_of_nonneg_right
+      rw [Metric.mem_ball, Real.dist_eq] at hx'
+      have h_ineg_rx'x :  -r < x' - x := (abs_lt.mp hx').1
+      have: x-r < x':= by
+        linarith [h_ineg_rx'x]
+      have h_r_x_2 : x-r=r := by
+        unfold r
+        ring_nf
+      rw[h_r_x_2] at this
+      have h_res: -x' < -r := by
+        linarith
+      exact h_res.le
+      exact ht_pos.le
+    exact le_trans first_ineq second_ineq
+  have h_bound_int : Integrable bound_func (volume.restrict (Ioi 0)) := by
+    apply (integrableOn_exp_mul_Ioi (by linarith) 0).integrable
+
+  have h_diff : ∀ᵐ t ∂volume.restrict (Ioi 0), ∀ x' ∈ Metric.ball x r,
+      HasDerivAt (fun x_param => neg_sinc_sq_times_id_exp t x_param) (sin_sq_times_exp t x') x' := by
+    rw [ae_restrict_iff' measurableSet_Ioi]
+    refine Filter.Eventually.of_forall (fun t ht_mem x' _ => ?_)
+    have ht_pos : 0 < t := by
+      rw[mem_Ioi] at ht_mem
+      exact ht_mem
+    exact hasDeriv_neg_sinc_sq_times_id_exp t ht_pos x'
+
+  have h_final := hasDerivAt_integral_of_dominated_loc_of_deriv_le
+    hr hF_AEmeas hF_int hF'_meas h_bound h_bound_int h_diff
+
+  unfold integral_sin_sq_times_exp integral_neg_sinc_sq_times_id_exp
+  exact h_final.2
+
+
+lemma integrable_cexp_mul_Ioi_of_re_neg {z : ℂ} (hz : z.re < 0) (ε : ℝ) :
+    Integrable (fun (t : ℝ) => cexp (↑t * z)) (volume.restrict (Ioi ε)) := by
+  rw [← integrable_norm_iff]
+  simp_rw [Complex.norm_exp]
+  have : (fun t:ℝ ↦ (rexp ((↑t * z).re))) = (fun (t:ℝ) ↦ rexp ( (z.re) * t)) := by
+    funext t
+    rw [Complex.mul_re, Complex.ofReal_re, Complex.ofReal_im, zero_mul, sub_zero, mul_comm]
+
+  rw [this]
+  exact integrableOn_exp_mul_Ioi hz ε
+  -- Mesurabilité
+  apply Continuous.aestronglyMeasurable
+  continuity
+
+lemma add_integral_integrable(ε : ℝ)(x : ℝ) (hx : 0 < x)  :
+ ∫ t in Ioi ε, (cexp (-↑t*(2*I + x))+ cexp ( ↑t*(2*I -x )) -2*cexp (- ↑t*x))=
+ (∫ t in Ioi ε, cexp (-↑t*(2*I + x)))+ (∫ t in Ioi ε,cexp ( ↑t*(2*I -x ))) -∫ t in Ioi ε,(2*cexp (- ↑t*x)):= by
+  have h_int1 : Integrable (fun t ↦ cexp (↑t * (-2 * I - x))) (volume.restrict (Ioi ε)) := by
+    apply integrable_cexp_mul_Ioi_of_re_neg
+    simp [hx]
+  have h_int2 : Integrable (fun t ↦ cexp (↑t * (2 * I - x))) (volume.restrict (Ioi ε)) := by
+    apply integrable_cexp_mul_Ioi_of_re_neg
+    simp [hx]
+  have h_int3 : Integrable (fun t:ℝ ↦ (2 : ℂ) * cexp (↑t * (-x))) (volume.restrict (Ioi ε)) := by
+    apply Integrable.const_mul
+    apply integrable_cexp_mul_Ioi_of_re_neg
+    simp [hx]
+  have h_rew : ∀ t, -↑t * (2 * I + x) = ↑t * (-2 * I - x) := fun t ↦ by ring
+  simp_rw [h_rew]
+  rw [integral_sub, integral_add]
+  · exact h_int1
+  · exact h_int2
+  · exact h_int1.add h_int2
+  · have : (fun t:ℝ ↦ 2 * cexp (-↑t * ↑x))=fun t:ℝ ↦ 2 * cexp (↑t * (-↑x)):= by
+      ext t
+      ring_nf
+    rw[this]
+    exact h_int3
+
 theorem compute_deriv_integral_sin_div_times_exp_eps(ε : ℝ)(x : ℝ) (hx : 0 < x) :
-- ∫ t in Ioi ε, Real.sin t * Real.exp (-x * t)=-rexp (-x * ε) * (Real.cos ε + Real.sin ε * x) / (1 + x^2) :=by
+ ∫ t in Ioi ε, (Real.sin t)^2 * Real.exp (-x * t)=rexp (- x* ε)*((Real.sin (2 * ε)- (x/2) * Real.cos (2 * ε)) / (4 + x^2)+ 1 / (2 * x)) :=by
   apply (Complex.ofReal_inj).mp
 
-  calc  ↑(-∫ (t : ℝ) in Ioi ε, Real.sin t * rexp (-x * t))
-    _ = - ∫ t in Ioi ε, (Real.sin t * rexp (-x * t) : ℂ) := by
-      simp only [ofReal_neg]
+  calc  ↑(∫ (t : ℝ) in Ioi ε, (Real.sin t)^2 * rexp (-x * t))
+    _ =  ∫ t in Ioi ε, ((Real.sin t)^2* rexp (-x * t) : ℂ) := by
       simp[←integral_complex_ofReal]
-    _=- ∫ t in Ioi ε, (Real.sin t:ℂ) * (rexp (-x * t) : ℂ):= by
+    _= ∫ t in Ioi ε, (Real.sin t:ℂ)^2 * (rexp (-x * t) : ℂ):= by
       congr
-    _= - ∫ t in Ioi ε, (Real.sin t:ℂ) * cexp (-x * ↑t) := by
+    _= ∫ t in Ioi ε, (Real.sin t:ℂ)^2 * cexp (-x * ↑t) := by
       congr
       simp
-    _ = - ∫ t in Ioi ε, ((cexp (I * ↑t) - cexp (-I * ↑t)) / (2 * I)) * cexp (-x * ↑t):= by
-       congr
-       funext t
-       simp
-       have h_sin : Complex.sin t = (Complex.exp (-t * I) - Complex.exp (t * I)) * I / 2 := by
+    _ = ∫ t in Ioi ε, ((cexp (-I * ↑t) - cexp (I * ↑t)) / (2 * I))^2 * cexp (-x * ↑t):= by
+      congr
+      funext t
+      simp
+      have h_sin : Complex.sin t = (Complex.exp (-t * I) - Complex.exp (t * I)) * I / 2 := by
         rw [← Complex.two_sin]
         simp
-       simp_rw [h_sin]
-       field_simp [I_ne_zero]
-       rw [I_sq]
-       ring_nf
-    _ = - ∫ t in Ioi ε, ((cexp (I * ↑t- x*↑t) - cexp (-I*↑t-x * ↑t)) / (2 * I)) := by
+      simp_rw [h_sin]
+      field_simp [I_ne_zero]
+      simp
+    _=∫ t in Ioi ε, (cexp (-I * ↑t) - cexp (I * ↑t))^2 / (2 * I)^2 * cexp (-x * ↑t):= by
       congr
       funext t
       field_simp
-      have h_distrib : (cexp (I * t) - cexp (-(I * t))) * cexp (-(t * x)) =
-        cexp (t * (I - x)) - cexp (t * (-I - x)) := by
-        rw [sub_mul, ← Complex.exp_add, ← Complex.exp_add]
-        ring_nf
-      rw[h_distrib]
-    _=- ∫ t in Ioi ε, ((cexp (↑t*(I- x) ) - cexp (-↑t*(I+x))) / (2 * I)) := by
+    _= ∫ t in Ioi ε, (cexp (-I * ↑t)^2 -2*cexp (-I * ↑t)*cexp (I * ↑t)+ cexp (I * ↑t)^2) / (2 * I)^2 * cexp (-x * ↑t):= by
       congr
       funext t
-      field_simp
-      have:  cexp (t * (I - x)) - cexp (t * (-I - x)) = cexp (t * (I - x)) - cexp (-(t * (I + x))) := by
-        congr 1
+      ring_nf
+     _= ∫ t in Ioi ε, (cexp (-2*I * ↑t) -2+ cexp (2*I * ↑t)) / (2 * I)^2 * cexp (-x * ↑t):= by
+      congr
+      funext t
+      have: cexp (-I * ↑t) ^ 2 =  cexp (-2*I * ↑t):= by
+        rw [← Complex.exp_nat_mul]
         ring_nf
       rw[this]
-    _=-1/(2 * I)* ∫ t in Ioi ε, (cexp (↑t*(I- x) ) - cexp (-↑t*(I+x))) := by
-      simp_rw [div_eq_mul_inv, mul_comm _ (2 * I)⁻¹]
-      rw [integral_mul_left (2 * I)⁻¹]
-      field_simp
+      have: cexp (I * ↑t) ^ 2 =  cexp (2*I * ↑t):= by
+        rw [← Complex.exp_nat_mul]
+        ring_nf
+      rw[this]
+      have: 2*cexp (-I * ↑t)*cexp (I * ↑t)= 2:= by
+        field_simp
+        rw [← Complex.exp_add (-(I * ↑t)) (I * ↑t)]
+        ring_nf
+        exact Complex.exp_zero
+      rw[this]
+    _= -∫ t in Ioi ε, (cexp (-2*I * ↑t) -2+ cexp (2*I * ↑t)) / 4  * cexp (-x * ↑t):= by
+      rw [← integral_neg]
       congr
       funext t
       field_simp
-    _ = - 1 / (2 * I) * ((∫ t in Ioi ε, cexp (t * (I - x))) - ∫ t in Ioi ε, cexp (-t * (I + x))) := by
-      have: ∫ t in Ioi ε, (cexp (↑t*(I- x) ) - cexp (-↑t*(I+x)))= (∫ t in Ioi ε, cexp (t * (I - x))) - ∫ t in Ioi ε, cexp (-t * (I + x)):= by
-        have hf : Integrable (fun (t:ℝ) ↦ (cexp (↑t * (I - ↑x)) : ℂ)) (volume.restrict (Ioi ε)) := by
-          rw [← integrable_norm_iff]
-          simp_rw [Complex.norm_exp]
-          simp only [mul_re, I_re, I_im, ofReal_re, ofReal_im, add_re,
-               mul_zero, sub_self, zero_add, neg_mul, zero_mul, sub_zero]
-          have: (fun a ↦ rexp (a * (I - ↑x).re))= (fun a ↦ rexp ( (I - ↑x).re* a)):= by
-            funext a
-            field_simp
-          rw[this]
-          have: (I - ↑x).re<0:= by
-            simp
-            exact hx
-          exact integrableOn_exp_mul_Ioi this ε
-          apply ContinuousOn.aestronglyMeasurable
-          apply Continuous.continuousOn
-          apply Continuous.cexp
-          apply Continuous.mul
-          · exact continuous_ofReal
-          · exact continuous_const
-          exact measurableSet_Ioi
-        have hg : Integrable (fun (t:ℝ) ↦ (cexp (-t * (I + x))))  (volume.restrict (Ioi ε)) := by
-          rw [← integrable_norm_iff]
-          simp_rw [Complex.norm_exp]
-          simp only [mul_re, I_re, I_im, ofReal_re, ofReal_im, add_re,
-               mul_zero, sub_self, zero_add, neg_mul, zero_mul, sub_zero]
-          have: (fun (a:ℝ) ↦  rexp (-(↑a * (I + ↑x))).re) = (fun (a:ℝ) ↦ rexp ((-I -↑x).re* a)):= by
-            funext a
-            field_simp
-            have h_re_right : (-I - ↑x).re = -x := by
-              simp [sub_re, I_re, ofReal_re]
-            rw[h_re_right]
-            have h_arg : -(↑a * (I + ↑x)) = (-a * x : ℝ) + (-a : ℝ) * I := by
-              ring_nf
-              simp [I_re, I_im]
-              ring
-            rw [h_arg]
-            have h_exp_mul: (↑(-a * x) + ↑(-a) * I).re = (-a * x):= by
-              rw[Complex.add_re]
-              simp [Complex.ofReal_re]
-            rw [h_exp_mul]
-            field_simp
-          rw[this]
-          have: (-I - ↑x).re<0:= by
-            simp
-            exact hx
-          exact integrableOn_exp_mul_Ioi this ε
-          apply ContinuousOn.aestronglyMeasurable
-          apply Continuous.continuousOn
-          apply Continuous.cexp
-          apply Continuous.mul
-          · continuity
-          · exact continuous_const
-          exact measurableSet_Ioi
-        have h_sub: ∫ t in Ioi ε, (cexp (↑t*(I- x) ) - cexp (-↑t*(I+x))) =
-         (∫ t in Ioi ε, cexp (t * (I - x))) - ∫ t in Ioi ε, cexp (-t * (I + x)) := by
-          exact integral_sub hf hg
-        rw[h_sub]
+      rw [I_sq]
+      ring_nf
+    _= -∫ t in Ioi ε, (cexp (-2*I * ↑t -x * ↑t) -2*cexp (-x * ↑t) + cexp (2*I * ↑t-x * ↑t)) / 4  := by
+      congr
+      funext t
+      field_simp
+      rw [sub_add_eq_add_sub, sub_mul,add_mul]
+
+      have: cexp (-(2 * I * ↑t)) * cexp (-(↑t * ↑x)) =  cexp (↑t * (-(2 * I) - ↑x)):= by
+        rw [← Complex.exp_add (-(2 * I * ↑t)) (-(↑t * ↑x))]
+        ring_nf
       rw[this]
-    _= -1 / (2 * I) * (-cexp ((I - ↑x) * ↑ε) / (I - ↑x) - ∫ (t : ℝ) in Ioi ε, cexp (-↑t * (I + ↑x))):= by
-      let a := I - ↑x
+
+      have: cexp ((2 * I * ↑t)) * cexp (-(↑t * ↑x)) =  cexp (↑t * (2 * I - ↑x)):= by
+        rw [← Complex.exp_add ((2 * I * ↑t)) (-(↑t * ↑x))]
+        ring_nf
+      rw[this]
+      ring_nf
+     _= -∫ t in Ioi ε, (cexp (-↑t*(2*I + x))+ cexp ( ↑t*(2*I -x )) -2*cexp (- ↑t*x) ) / 4  := by
+      congr
+      funext t
+      field_simp
+      have: cexp (↑t * (-(2 * I) - ↑x)) =   cexp (-(↑t * (2 * I + ↑x))) := by
+        ring_nf
+      rw[this]
+      ring_nf
+
+    _= -∫ t in Ioi ε,1/4* (cexp (-↑t*(2*I + x))+ cexp ( ↑t*(2*I -x )) -2*cexp (- ↑t*x) ) := by
+      congr
+      funext t
+      field_simp
+    _= -1/4*(∫ t in Ioi ε, cexp (-↑t*(2*I + x))+ cexp ( ↑t*(2*I -x )) -2*cexp (- ↑t*x) ) := by
+      simp_rw [div_eq_mul_inv]
+      simp
+      rw [integral_mul_left ( 4⁻¹ )]
+    _= -1/4*((∫ t in Ioi ε, cexp (-↑t*(2*I + x)))+ (∫ t in Ioi ε,cexp ( ↑t*(2*I -x ))) -(∫ t in Ioi ε,2*cexp (- ↑t*x)) ) := by
+      rw[ add_integral_integrable ε x hx]
+    _=-1/4*((cexp ( -(2*I + x)*↑ε) / (2*I + x))+ (∫ t in Ioi ε,cexp ( ↑t*(2*I -x ))) -(∫ t in Ioi ε,2*cexp (- ↑t*x)) ) := by
+      let a := -(2*I + x)
       have h_re : a.re < 0 := by
         unfold a
-        simp [sub_re, I_re, ofReal_re]
+        simp [I_re, ofReal_re]
         exact hx
+      have h_int_val : ∫ (t : ℝ) in Ioi ε, cexp (↑t*a) = - cexp (a*↑ε) / a := by
+        have :∫ (t : ℝ) in Ioi ε, cexp (↑t*a) = ∫ (t : ℝ) in Ioi ε, cexp (a*↑t):= by
+          congr
+          funext t
+          field_simp
+        rw[this]
+        apply  integral_exp_mul_complex_Ioi h_re ε
 
+      have: ∀t: ℝ , cexp (↑t * a) = cexp (-↑t*(2*I + x)) := by
+        unfold a
+        intro t
+        ring_nf
+      simp_rw[this] at h_int_val
+      rw[h_int_val]
+      unfold a
+      simp
+      field_simp
+      have h_in : -↑x + -(2 * I) = -(2 * I+↑x ) := by ring
+      rw[h_in]
+      field_simp
+
+
+    _=-1/4*((cexp ( -(2*I + x)*↑ε) / (2*I + x))+ (-cexp ((2 * I - ↑x) * ↑ε) / (2 * I - ↑x)) -(∫ t in Ioi ε,2*cexp (- ↑t*x)) ) := by
+      let a := 2*I -x
+      have h_re : a.re < 0 := by
+        unfold a
+        simp [I_re, ofReal_re]
+        exact hx
       have h_int_val : ∫ (t : ℝ) in Ioi ε, cexp (↑t*a) = - cexp (a*↑ε) / a := by
         have :∫ (t : ℝ) in Ioi ε, cexp (↑t*a) = ∫ (t : ℝ) in Ioi ε, cexp (a*↑t):= by
           congr
@@ -357,139 +810,158 @@ theorem compute_deriv_integral_sin_div_times_exp_eps(ε : ℝ)(x : ℝ) (hx : 0 
         apply  integral_exp_mul_complex_Ioi h_re ε
       unfold a at h_int_val
       rw[h_int_val]
-    _= -1 / (2 * I) * (-cexp ((I - ↑x) * ↑ε) / (I - ↑x)  -cexp (-(I + ↑x) * ↑ε) / (I + ↑x)) := by
-      let a := -(I +↑x)
+
+    _=-1/4*((cexp ( -(2*I + x)*↑ε) / (2*I + x))+ (-cexp ((2 * I - ↑x) * ↑ε) / (2 * I - ↑x)) +(2* cexp (↑(-x) * ↑ε) / ↑(-x)) ) := by
+      let a:ℂ := ↑(-x)
+
       have h_re : a.re < 0 := by
         unfold a
-        simp [sub_re, I_re, ofReal_re]
+        simp [I_re, ofReal_re]
         exact hx
-      have : ∫ (t : ℝ) in Ioi ε, cexp (-↑t * (I + ↑x))=∫ (t : ℝ) in Ioi ε, cexp (a*↑t):= by
-        congr
-        funext t
+      have h_int_val : ∫ (t : ℝ) in Ioi ε,2* cexp (↑t*a) = - 2*cexp (a*↑ε) / a := by
+        have :∫ (t : ℝ) in Ioi ε, 2* cexp (↑t*a) = 2*∫ (t : ℝ) in Ioi ε, cexp (a*↑t):= by
+          rw[integral_mul_left 2]
+          congr
+          funext t
+          field_simp
+        rw[this]
+        rw[integral_exp_mul_complex_Ioi h_re ε]
+        ring_nf
+      have: ∀t: ℝ , cexp (↑t * a) = cexp (-↑t*x) := by
+        intro t
         unfold a
-        field_simp
-      rw[this]
-      rw[integral_exp_mul_complex_Ioi h_re ε]
-      unfold a
-      field_simp
-    _=1 / (2 * I) * (cexp ((I - ↑x) * ↑ε) / (I - ↑x)  +cexp (-(I + ↑x) * ↑ε) / (I + ↑x)) := by
+        push_cast
+        ring_nf
+      simp_rw[this] at h_int_val
+      unfold a at h_int_val
+      rw[h_int_val]
+      have:  - -2 * cexp (↑(-x) * ↑ε) / ↑(-x)= 2 * cexp (↑(-x) * ↑ε) / ↑(-x):= by
+        ring
+      congr 2
       ring
-    _=1 / (2 * I) * (cexp ((I - ↑x) * ↑ε) *(I + ↑x)/ ((I - ↑x)*(I + ↑x) ) +cexp (-(I + ↑x) * ↑ε) / (I + ↑x)) := by
-      have h1 : I - ↑x ≠ 0 := by
-        intro h
-        have h_re := congr_arg Complex.re h
-        simp at h_re
-        exact hx.ne' h_re
-      have h2 : I + ↑x ≠ 0 := by
-        intro h
-        have h_re := congr_arg Complex.re h
-        simp at h_re
-        exact hx.ne' h_re
-      field_simp
-    _=1 / (2 * I) * (cexp ((I - ↑x) * ↑ε) *(I + ↑x)/ ((I - ↑x)*(I + ↑x) ) +cexp (-(I + ↑x) * ↑ε)*(I - ↑x) /((I - ↑x)*(I + ↑x) )) := by
-      have h1 : I - ↑x ≠ 0 := by
-        intro h
-        have h_re := congr_arg Complex.re h
-        simp at h_re
-        exact hx.ne' h_re
-      have h2 : I + ↑x ≠ 0 := by
+
+    _=-1/4*((cexp ( -(2*I + x)*↑ε) *(2 * I - ↑x) / ((2*I + x)*(2 * I - ↑x)))+ (-cexp ((2 * I - ↑x) * ↑ε) / (2 * I - ↑x)) +(2* cexp (↑(-x) * ↑ε) / ↑(-x)) ) := by
+      congr 2
+      have h1 : 2 * I - ↑x ≠ 0 := by
         intro h
         have h_re := congr_arg Complex.re h
         simp at h_re
         exact hx.ne' h_re
       field_simp
-    _=1 / (2 * I) * (cexp ((I - ↑x) * ↑ε) *(I + ↑x)+ cexp (-(I + ↑x) * ↑ε)*(I - ↑x))/ ((I - ↑x)*(I + ↑x) ) := by
+
+    _=-1/4*((cexp ( -(2*I + x)*↑ε) *(2 * I - ↑x) / ((2*I + x)*(2 * I - ↑x)))+ (-cexp ((2 * I - ↑x) * ↑ε) *(2*I + x)/ ((2*I + x)*(2 * I - ↑x))) +(2* cexp (↑(-x) * ↑ε) / ↑(-x)) ) := by
+      congr 2
+      have h1 : 2*I + x ≠ 0 := by
+        intro h
+        have h_re := congr_arg Complex.re h
+        simp at h_re
+        exact hx.ne' h_re
+      field_simp
+    _=-1/4*((cexp ( -(2*I + x)*↑ε) *(2 * I - ↑x) -cexp ((2 * I - ↑x) * ↑ε) *(2*I + x))/ ((2*I + x)*(2 * I - ↑x)) +(2* cexp (↑(-x) * ↑ε) / ↑(-x)) ) := by
+      congr 2
       ring
-    _=-1 / (2 * I) * (cexp ((I - ↑x) * ↑ε) *(I + ↑x)+ cexp (-(I + ↑x) * ↑ε)*(I - ↑x))/(1+x^2):= by
-      have h_denom : (I - ↑x) * (I + ↑x) = -(1 + ↑x^2) := by
+
+    _=-1/4*(-(cexp ( -(2*I + x)*↑ε) *(2 * I - ↑x) -cexp ((2 * I - ↑x) * ↑ε) *(2*I + x))/ (4 + x^2) +(2* cexp (↑(-x) * ↑ε) / ↑(-x)) ) := by
+      congr 2
+      have h_denom : (2*I + x)*(2 * I - ↑x) = -(4 + ↑x^2) := by
         ring_nf
         simp only [I_sq]
+        ring_nf
       rw [h_denom]
       field_simp
-    _=-1 / (2 * I) *(cexp (- ↑x* ↑ε)* cexp (I* ↑ε)*(I + ↑x)+ cexp (- ↑x* ↑ε)*cexp (-(I* ↑ε))*(I - ↑x))/(1+x^2):=by
+     _=-1/4 * ( ((cexp (2*I*↑ε) - cexp (-2*I*↑ε)) * 2*I * cexp (-↑x*↑ε) + (cexp (2*I*↑ε) + cexp (-2*I*↑ε)) * x * cexp (-↑x*↑ε)) / (4 + x^2) + (2 * cexp (-↑x*↑ε) / -↑x) ) := by
+      congr 2
       field_simp
-      have:  cexp ((I - ↑x) * ↑ε) =cexp (-(↑x * ↑ε))* cexp (I * ↑ε):= by
-        simp_rw [sub_mul, exp_sub (I * ↑ε) ]
-        field_simp
-        rw [←Complex.exp_add]
+      have: cexp (-((2 * I + ↑x) * ↑ε))= cexp (-2 * I *↑ε) *cexp (-↑x* ↑ε):= by
         ring_nf
-        rw [Complex.exp_zero]
+        rw [exp_sub (-(I * ↑ε * 2)) (↑x * ↑ε)]
+        field_simp
+        rw [← Complex.exp_add]
+        ring_nf
+        simp[Complex.exp_zero]
       rw[this]
-      have: cexp (-(↑ε * (I + ↑x)))= cexp (-(↑x * ↑ε))* cexp (-(I * ↑ε)):= by
-        simp_rw [Complex.exp_neg, mul_add, exp_add (↑ε * I) ]
+      have: cexp (↑ε * (2 * I - ↑x)) = cexp (↑ε *2 * I) * cexp (-↑x* ↑ε):= by
+        ring_nf
+        rw [exp_sub (↑ε* I * 2) (↑ε*↑x)]
+        field_simp
+        rw [← Complex.exp_add]
+        ring_nf
+        simp[Complex.exp_zero]
+      rw[this]
+      field_simp
+      ring_nf
+      calc 2 * cexp (↑(-x) * ↑ε) / ↑(-x)
+      _= 2 * cexp ((-↑x) * ↑ε) / (-↑x) := by
+        rw[Complex.ofReal_neg]
+      _ = 2 * cexp (-(↑x * ↑ε)) / (-↑x) := by
+        ring
+      _ = 2 * cexp (-↑x * ↑ε) / -↑x    := by
+        ring
+    _= -cexp (-↑x * ↑ε) / 4 * ( (2 * I * (cexp (2 * I * ↑ε) - cexp (-2 * I * ↑ε)) + x * (cexp (2 * I * ↑ε) + cexp (-2 * I * ↑ε))) / (4 + x^2) - 2 / x ) := by
+      ring_nf
+    _= -cexp (-↑x * ↑ε) / 4 * ( (2 * I * (2 * I * Complex.sin (2 * ε)) + x * (2 * Complex.cos (2 * ε))) / (4 + x^2) - 2 / x ) := by
+      have: cexp (2 * I * ↑ε) - cexp (-2 * I * ↑ε)= 2 * I*Complex.sin (2  * ↑ε):= by
+        unfold Complex.sin
+        ring
+        rw[I_sq]
+        ring
+      rw[this]
+      have: cexp (2 * I * ↑ε) + cexp (-2 * I * ↑ε)= 2 * Complex.cos (2 * ↑ε):= by
+        unfold Complex.cos
         field_simp
       rw[this]
-      field_simp
-    _=-1 / (2 * I) *cexp (- ↑x* ↑ε)*(cexp (I* ↑ε)*(I + ↑x)+ cexp (-(I* ↑ε))*(I - ↑x) )/(1+x^2):= by
-      ring
-    _=-1 / (2 * I) *cexp (- ↑x* ↑ε)*( (cexp (I* ↑ε)+cexp (-(I* ↑ε)))*I + (cexp (I* ↑ε)-cexp (-(I* ↑ε)))* ↑x )/(1+x^2):= by
-      field_simp
-      ring
-    _=-1 / (2 * I) *cexp (- ↑x* ↑ε)* ((2 * Complex.cos ε) * I+ (2 * I * Complex.sin ε) * ↑x) / (1 + ↑x^2) := by
-      have h_sin : Complex.sin ε = (cexp (-(I* ↑ε))-cexp (I* ↑ε) )* I / 2 := by
-        have : cexp (-↑ε*I)-cexp ( ↑ε*I)= cexp (-(I* ↑ε))-cexp (I* ↑ε):= by
-          field_simp
-        rw[← this]
-        rw [← Complex.two_sin]
-        simp
-      have h_cos : Complex.cos ε = (cexp (I * ↑ε) + cexp (-(I * ↑ε))) / 2 := by
-        have : cexp (↑ε*I)+cexp ( -↑ε*I)= cexp (I * ↑ε) + cexp (-(I * ↑ε)):= by
-          field_simp
-        rw[← this]
-        rw [← Complex.two_cos]
-        simp
-      rw [h_sin, h_cos]
-      field_simp [I_ne_zero, h_sin]
-      congr
-      rw [mul_add, mul_add]
-      have: I * (I * ↑x * (cexp (-(I * ↑ε)) - cexp (I * ↑ε)))= -↑x * (cexp (-(I * ↑ε)) - cexp (I * ↑ε)):= by
-        have: I * (I * ↑x * (cexp (-(I * ↑ε)) - cexp (I * ↑ε)))=
-              I * (I * (↑x * (cexp (-(I * ↑ε)) - cexp (I * ↑ε)))):= by
-              field_simp
-        rw[this]
-        rw [← mul_assoc I I (↑x * (cexp (-(I * ↑ε)) - cexp (I * ↑ε))) , I_mul_I]
-        ring_nf
-      rw[this]
-      ring
-    _=-1 / (2 * I)*2*I  *cexp (- ↑x* ↑ε)* (( Complex.cos ε)+ ( Complex.sin ε) * ↑x) / (1 + ↑x^2) := by
-      field_simp
-    _=-cexp (- ↑x* ↑ε)* (( Complex.cos ε)+ ( Complex.sin ε) * ↑x) / (1 + ↑x^2) := by
-      field_simp
-    _=-rexp (- x* ε)* (( Complex.cos ε)+ ( Complex.sin ε) * ↑x) / (1 + ↑x^2) := by
+    _= -cexp (-↑x * ↑ε) * ( (-Complex.sin (2 * ε) + (x/2) * Complex.cos (2 * ε)) / (4 + x^2) - 1 / (2 * x) ) := by
+      ring_nf
+      rw[I_sq]
+      ring_nf
+    _=-rexp (- x* ε)* ( (-Complex.sin (2 * ε) + (x/2) * Complex.cos (2 * ε)) / (4 + x^2) - 1 / (2 * x) ) := by
       have : cexp (- ↑x* ↑ε)= cexp (↑(- x* ε)):= by
         push_cast
         simp
       rw[this]
       rw[Complex.ofReal_exp]
-    _=-rexp (- x* ε)* ( Real.cos ε+ Real.sin ε * ↑x) / (1 + ↑x^2) := by
+    _=-rexp (- x* ε)* ( (-↑(Real.sin (2 * ε)) + (x/2) * ↑(Real.cos (2 * ε))) / (4 + x^2) - 1 / (2 * x) ) := by
       rw[Complex.ofReal_cos]
       rw[Complex.ofReal_sin]
-    _= -↑(rexp (-x * ε)) * (↑(Real.cos ε) + ↑(Real.sin ε) * ↑x) / ↑((1 : ℝ) + x^2):= by
       push_cast
       field_simp
-    _= ↑(-rexp (-x * ε) * (Real.cos ε + Real.sin ε * x) / ((1 : ℝ) + x^2)):= by
+    _=-rexp (- x* ε)* (↑(-(Real.sin (2 * ε)) + (x/2) * (Real.cos (2 * ε))) / (↑( (4:ℝ) + x^2))- ↑(1 / (2 * x))):= by
       push_cast
       field_simp
+    _=-rexp (- x* ε)* (↑((-Real.sin (2 * ε)+ (x/(2:ℝ)) * Real.cos (2 * ε)) / ((4:ℝ) + x^2))- ↑(1 / (2 * x))):= by
+      push_cast
+      field_simp
+    _=-rexp (- x* ε)* ↑(((-Real.sin (2 * ε)+ (x/(2:ℝ)) * Real.cos (2 * ε)) / ((4:ℝ) + x^2))- (1:ℝ) / ((2:ℝ) * x)):= by
+      push_cast
+      field_simp
+    _=↑(-rexp (- x* ε)*((-Real.sin (2 * ε)+ (x/(2:ℝ)) * Real.cos (2 * ε)) / ((4:ℝ) + x^2)- (1:ℝ) / ((2:ℝ) * x))):= by
+      push_cast
+      field_simp
+    _=↑(rexp (- x* ε)*((Real.sin (2 * ε)- (x/(2:ℝ)) * Real.cos (2 * ε)) / ((4:ℝ) + x^2)+ (1:ℝ) / ((2:ℝ) * x))):= by
+      push_cast
+      field_simp
+      ring_nf
 
-theorem hasDeriv_integral_sin_div_times_exp' (x : ℝ) (hx : 0 < x) : HasDerivAt (integral_sin_div_times_exp) (- 1 / (1 + x^2)) x:= by
-  have h_deriv: HasDerivAt (integral_sin_div_times_exp) (- ∫ t in Ioi 0, Real.sin t * Real.exp (-x * t)) x := by
-    exact hasDeriv_integral_sin_div_times_exp x hx
 
-  rw[compute_deriv_integral_sin_div_times_exp_eps 0 x hx] at h_deriv
-  have h_val : -rexp (-x * 0) * (Real.cos 0 + Real.sin 0 * x) / (1 + x ^ 2) = -1 / (1 + x ^ 2) := by
-    simp only [ Real.cos_zero, Real.sin_zero, zero_mul, add_zero, mul_one]
-    have :-rexp (-x * 0)= -1:= by
-      simp
-    rw[this]
+theorem hasDeriv_integral_neg_sinc_sq_times_id_exp' (x : ℝ) (hx : 0 < x) : HasDerivAt (integral_neg_sinc_sq_times_id_exp) (-(1/2) * x / (4 + x^2)+ 1 / (2 * x)) x:= by
+  have h_deriv: HasDerivAt (integral_neg_sinc_sq_times_id_exp) (integral_sin_sq_times_exp x) x := by
+    exact hasDeriv_integral_neg_sinc_sq_times_id_exp x hx
+  unfold integral_sin_sq_times_exp at h_deriv
+  unfold sin_sq_times_exp at h_deriv
+  simp_rw[compute_deriv_integral_sin_div_times_exp_eps 0 x hx] at h_deriv
+  simp at h_deriv
+  have:-(x / 2) / (4 + x ^ 2) + x⁻¹ * 2⁻¹= -(1/2) * x / (4 + x^2)+ 1 / (2 * x):= by
+    field_simp
+  rw[this] at h_deriv
+  exact h_deriv
 
-  exact h_deriv.congr_deriv h_val
 
-
-lemma tendsto_integral_sin_div_exp :
-    Tendsto (fun x : ℝ ↦ ∫ t in Ioi 0, rexp (-x * t) * (Real.sin t / t)) atTop (𝓝 0) := by
+lemma tendsto_integral_neg_sinc_sq_times_id_exp :
+    Tendsto (integral_neg_sinc_sq_times_id_exp) atTop (𝓝 0) := by
   classical
+  unfold integral_neg_sinc_sq_times_id_exp  neg_sinc_sq_times_id_exp
   rw [tendsto_zero_iff_norm_tendsto_zero]
-  let f := fun x : ℝ ↦ ‖∫ t in Ioi 0, (Real.sin t / t) * rexp (-x * t)‖
+  let f := fun x : ℝ ↦ ‖∫ (t : ℝ) in Ioi 0, -sinc t ^ 2 * t * rexp (-x * t)‖
   let g : ℝ → ℝ := fun _ ↦ 0
   let h := fun x : ℝ ↦ 1 / x
   apply tendsto_of_tendsto_of_tendsto_of_le_of_le' (g := g) (h := h)
@@ -512,46 +984,166 @@ lemma tendsto_integral_sin_div_exp :
 
       apply MeasureTheory.Integrable.of_integral_ne_zero
       exact h_neq
+
     · filter_upwards [self_mem_ae_restrict (measurableSet_Ioi : MeasurableSet (Ioi (0:ℝ)))] with t ht
       have ht_pos : 0 < t := mem_Ioi.mp ht
       rw [norm_mul, norm_eq_abs (rexp _), abs_exp]
       field_simp
       rw [norm_eq_abs]
-      rw [abs_div]
-      rw[ div_le_one]
-      · simp[abs_sin_le_abs]
-      · rw [abs_eq_self.mpr ht_pos.le]
-        exact ht_pos
+      simp[Real.abs_sinc_le_one]
+      by_cases h : |t| ≤ 1
+      · have h_sinc : |Real.sinc t| ≤ 1 := Real.abs_sinc_le_one t
+        have h_sinc2 : Real.sinc t ^ 2≤ 1 := by
+          simp
+          exact h_sinc
+        have abs_t_val:= abs_nonneg t
+        calc Real.sinc t ^ 2* |t|
+          _ ≤ 1 * |t| := by
+            apply mul_le_mul_of_nonneg_right  h_sinc2 abs_t_val
+          _ ≤ 1  := by simp [h]
+      · have :t≠ 0:= by
+          intro ht_zero
+          push_neg at h
+          rw [ht_zero, abs_zero] at h
+          have: ¬((1:ℝ)<0) := by linarith
+          exact absurd h this
+        unfold sinc
+        simp[this]
+        rw [div_pow, ← sq_abs (a:= t)]
+        field_simp
+        have h_sin : |Real.sin t| ≤ 1 := Real.abs_sin_le_one t
+        have h_sin2 : Real.sin t ^ 2≤ 1 := by
+          simp
+          exact h_sin
+        push_neg at h
+        exact h_sin2.trans h.le
+
+lemma tendsto_integral_sinc_sq_times_exp :
+    Tendsto (integral_sinc_sq_times_exp) atTop (𝓝 0) := by
+  classical
+  unfold integral_sinc_sq_times_exp  sinc_sq_times_exp
+  rw [tendsto_zero_iff_norm_tendsto_zero]
+  let f := fun x : ℝ ↦ ‖∫ (t : ℝ) in Ioi 0, rexp (-x * t) * sinc t ^ 2‖
+  let g : ℝ → ℝ := fun _ ↦ 0
+  let h := fun x : ℝ ↦ 1 / x
+  apply tendsto_of_tendsto_of_tendsto_of_le_of_le' (g := g) (h := h)
+  · exact tendsto_const_nhds
+  · unfold h
+    simp_rw[one_div]
+    exact tendsto_inv_atTop_zero
+  · exact Eventually.of_forall (fun x ↦ norm_nonneg _)
+  · filter_upwards [eventually_gt_atTop 0] with x hx_pos
+    dsimp [f, h]
+    have h_int_exp : ∫ t in Ioi 0, rexp (-x * t) = 1 / x := by
+      rw [integral_exp_mul_Ioi (neg_neg_of_pos hx_pos) 0]
+      simp [ mul_zero, Real.exp_zero]
+    rw [← h_int_exp]
+    rw [← Real.norm_eq_abs]
+    apply norm_integral_le_of_norm_le
+    · have h_neq : ∫ (t : ℝ) in Ioi 0, rexp (-x * t) ≠ 0 := by
+        rw [h_int_exp]
+        exact one_div_ne_zero (ne_of_gt hx_pos)
+
+      apply MeasureTheory.Integrable.of_integral_ne_zero
+      exact h_neq
+
+    · filter_upwards [self_mem_ae_restrict (measurableSet_Ioi : MeasurableSet (Ioi (0:ℝ)))] with t ht
+      have ht_pos : 0 < t := mem_Ioi.mp ht
+      rw [norm_mul, norm_eq_abs (rexp _), abs_exp]
+      field_simp
+      rw [norm_eq_abs]
+      simp[Real.abs_sinc_le_one]
+
+theorem integral_neg_sinc_sq_times_id_exp_eq (x : ℝ) (hx : 0 < x) :
+    integral_neg_sinc_sq_times_id_exp x = 1/4*Real.log (x^2/(4+x^2)) := by
+    let G := fun t => 1/4* Real.log (t^2/(4+t^2))
+    let H := fun t => integral_neg_sinc_sq_times_id_exp t - G t
+    have G_diff:  ∀ y >0 , HasDerivAt G (-(1/2) * y / (4 + y^2)+ 1 / (2 * y)) y := by
+      intro y hy
+
+      have hg : HasDerivAt G (-(1/2) * y / (4 + y^2) + 1 / (2 * y)) y := by
+        let f := fun t : ℝ ↦ t^2 / (4 + t^2)
+        let f' := (8 * y) / (4 + y^2)^2
+        have hGLog: G = fun t ↦ 1/4* Real.log (f t) := by
+          unfold G f
+          simp
+        have h_f_deriv : HasDerivAt f f' y := by
+          unfold f'
+          let u:= fun t : ℝ ↦ t^2
+          let v:= fun t : ℝ ↦ (4 + t^2)
+          have : f= fun t:ℝ ↦ u t/ v t:= by
+            unfold f u v
+            funext t
+            simp
+          rw[this]
+          have hu : HasDerivAt u (2 * y) y := by
+            unfold u
+            convert hasDerivAt_pow 2 y
+            simp
+          have hv : HasDerivAt v (0+2 * y) y := by
+            let v1:= fun t :ℝ ↦ (4:ℝ)
+            let v2:= fun t :ℝ ↦ t^2
+            have : v = v1+ v2 := by
+              unfold v v1 v2
+              funext t
+              simp
+            rw[this]
+            have hv1 : HasDerivAt v1 0 y := by
+              unfold v1
+              exact hasDerivAt_const (c:=4) y
+            have hv2 : HasDerivAt v2 (2 * y) y := by
+              unfold v2
+              convert hasDerivAt_pow 2 y
+              simp
+            apply HasDerivAt.add (f:=v1) (g:=v2) hv1 hv2
+          simp at hv
+          apply HasDerivAt.congr_deriv (HasDerivAt.div hu hv ?_)
+          · unfold u v at *
+            field_simp
+            ring_nf
+          · unfold v
+            have : 0 < 4+ y ^ 2:= by
+              have : 0 ≤ y ^ 2 := sq_nonneg y
+              linarith
+            linarith
+        have h_f_pos : f y ≠ 0 := by
+          unfold f
+          have pow_y: 0 < y ^ 2 := pow_pos hy 2
+          have pow_y_plus_const: 0 < 4 + y ^ 2:=
+          by linarith [sq_nonneg y]
+          have:=div_pos pow_y pow_y_plus_const
+          linarith
 
 
-theorem integral_sin_div_times_exp_eq_arctan (x : ℝ) (hx : 0 < x) :
-    integral_sin_div_times_exp x = Real.pi / 2 - Real.arctan x := by
-    let G := fun x => Real.pi / 2 - Real.arctan x
-    let H := fun x => integral_sin_div_times_exp x - G x
-    have G_diff:  ∀ y >0 , HasDerivAt G (-1 / (1 + y^2)) y := by
-        intro y hy
-        have hg : HasDerivAt G (0 - 1 / (1 + y^2)) y := by
-          apply HasDerivAt.sub
-          · exact hasDerivAt_const y (Real.pi / 2)
-          · exact hasDerivAt_arctan y
-        simp at hg;field_simp at hg
-        have:-(1 / (1 + y ^ 2))= -1 / (1 + y ^ 2):= by
+        have h_log_deriv : HasDerivAt (fun t ↦   Real.log (f t)) (f' / f y) y := by
+          apply HasDerivAt.log h_f_deriv h_f_pos
+
+        unfold f f' at h_log_deriv
+        unfold G
+        field_simp at h_log_deriv
+        have: 8 / (y * (4 + y ^ 2)) = 2/y - 2*y/ (4 + y^2):= by
+          field_simp
           ring_nf
-        rw[this] at hg
-        exact hg
+        simp_rw[this] at h_log_deriv
+        have: -(1 / 2) * y / (4 + y ^ 2) + 1 / (2 * y)= 1/4*( 2/y - 2*y/ (4 + y^2)):= by
+          field_simp
+          ring_nf
+        rw[this]
+        exact h_log_deriv.const_mul (1 / 4)
+      exact hg
 
     have h_deriv_eq : ∀ y >0 ,
-      HasDerivAt integral_sin_div_times_exp (-1 / (1 + y^2)) y ∧
-      HasDerivAt G (-1 / (1 + y^2)) y := by
+      HasDerivAt integral_neg_sinc_sq_times_id_exp (-(1/2) * y / (4 + y^2)+ 1 / (2 * y)) y ∧
+      HasDerivAt G (-(1/2) * y / (4 + y^2)+ 1 / (2 * y)) y := by
         intro y hy
-        refine ⟨hasDeriv_integral_sin_div_times_exp' y hy, ?_⟩
+        refine ⟨hasDeriv_integral_neg_sinc_sq_times_id_exp' y hy, ?_⟩
         exact G_diff y hy
 
 
     have h_Hdiff : DifferentiableOn ℝ H (Set.Ioi 0) := by
       intro y hy
-      have hF_diff : DifferentiableAt ℝ integral_sin_div_times_exp y :=
-    (hasDeriv_integral_sin_div_times_exp' y hy).differentiableAt
+      have hF_diff : DifferentiableAt ℝ integral_neg_sinc_sq_times_id_exp y :=
+    (hasDeriv_integral_neg_sinc_sq_times_id_exp' y hy).differentiableAt
       have hG : DifferentiableAt ℝ G y :=
         (G_diff y hy).differentiableAt
       exact (hF_diff.sub hG).differentiableWithinAt
@@ -575,24 +1167,57 @@ theorem integral_sin_div_times_exp_eq_arctan (x : ℝ) (hx : 0 < x) :
       isPreconnected_Ioi
 
     have h_lim : Tendsto H atTop (𝓝 0) := by
-      have hF_lim : Tendsto integral_sin_div_times_exp atTop (𝓝 0) := by
-        let h:= tendsto_integral_sin_div_exp
-        unfold integral_sin_div_times_exp
-        unfold sin_div_times_exp
+      have hF_lim : Tendsto integral_neg_sinc_sq_times_id_exp atTop (𝓝 0) := by
+        let h:= tendsto_integral_neg_sinc_sq_times_id_exp
+        unfold integral_neg_sinc_sq_times_id_exp
+        unfold neg_sinc_sq_times_id_exp
         exact h
 
       have hG_lim : Tendsto G atTop (𝓝 0) := by
-        simp [G]
-        rw [← sub_self (π / 2)]
-        apply Tendsto.sub
-        · exact tendsto_const_nhds
-        · exact tendsto_arctan_atTop.mono_left (le_refl _) |>.mono_right nhdsWithin_le_nhds
-      convert Tendsto.sub hF_lim hG_lim
-      simp
+        unfold G
+        rw [show (0 : ℝ) = 1 / 4 * 0 by ring]
+        apply Tendsto.const_mul
+
+        have h_log_cont : ContinuousAt Real.log 1 := continuousAt_log (by norm_num)
+        rw[show (0 : ℝ) = Real.log 1 by rw [Real.log_one]]
+        apply (continuousAt_log (by norm_num)).tendsto.comp
+        let f := fun t:ℝ ↦ t^2
+        have h_f : Tendsto f atTop atTop := tendsto_pow_atTop (by norm_num)
+        have h_frac : Tendsto (fun k:ℝ ↦ k ^ 2 / (4 + k ^ 2)) atTop (𝓝 1) := by
+          have : Tendsto (fun k:ℝ ↦ 1 / (4 * (1 / k ^ 2) + 1)) atTop (𝓝 (1 / (4 * 0 + 1))) := by
+            rw [show (fun k: ℝ ↦ (1:ℝ)/ ((4:ℝ) * ((1:ℝ) / k ^ 2) + (1:ℝ))) =( fun k:ℝ ↦ ((4:ℝ) * (1 / k ^ 2) + (1:ℝ))⁻¹) by ext; simp]
+            rw [show (1 / (4 * 0 + 1) : ℝ) = ((4 * 0 + 1)⁻¹: ℝ) by simp]
+            apply Tendsto.inv₀
+            apply Tendsto.add
+            · apply Tendsto.const_mul
+              have: (fun k ↦ 1 / k ^ 2)= fun k:ℝ ↦  k ^ (-(2:ℤ)):= by
+                funext k
+                simp
+                rfl
+              rw[this]
+              have: 2≠ 0:= by linarith
+              exact tendsto_pow_neg_atTop this
+            · exact tendsto_const_nhds
+            · ring_nf
+              linarith
+          simp at this
+          refine (tendsto_congr' ?_).mp this
+          filter_upwards [eventually_gt_atTop 0] with k hk
+          field_simp
+        exact h_frac
+      have: (0:ℝ) = 0-0 := by
+        simp
+      rw[this]
+      unfold H
+      apply Tendsto.sub
+      · exact hF_lim
+      · exact hG_lim
+
     have h_const : ∀ a ∈ Ioi 0, ∀ b ∈ Ioi 0, H a = H b := by
       intro a ha
       intro b hb
       apply IsOpen.is_const_of_deriv_eq_zero hIoi_open hIoi_preconnected h_Hdiff h_Hzero' ha hb
+
     have h_is_zero : ∀ y ∈ Ioi 0, H y = 0 := by
       intro y hy
       have h_ev : H =ᶠ[atTop] (fun _ ↦ H y) := by
@@ -603,7 +1228,542 @@ theorem integral_sin_div_times_exp_eq_arctan (x : ℝ) (hx : 0 < x) :
         exact tendsto_const_nhds.congr' h_ev.symm
       exact h_lim_const
     unfold H G at h_is_zero
+
     exact sub_eq_zero.mp (h_is_zero x hx)
+
+lemma hasDeriv_integral_sinc_sq_times_exp'(x : ℝ) (hx : 0 < x) : HasDerivAt (integral_sinc_sq_times_exp ) (1/4 * Real.log (x^2/(4+x^2))) x := by
+  have h_deriv: HasDerivAt (integral_sinc_sq_times_exp) (integral_neg_sinc_sq_times_id_exp x) x := by
+    exact hasDeriv_integral_sinc_sq_times_exp x hx
+  have h_deriv_eq:integral_neg_sinc_sq_times_id_exp x = 1/4*Real.log (x^2/(4+x^2)):= integral_neg_sinc_sq_times_id_exp_eq x hx
+  rw[h_deriv_eq] at h_deriv
+  exact h_deriv
+
+lemma h_log_ineq_neg1 : ∀ y, -1/2 < y → y ≤ 0 → Real.log (1 + y) ≤ y - y^2 / 2 := by
+  intro y hy_gt hy_le
+  let f := fun t ↦ Real.log (1 +t) - t + t^2 / 2
+  have h_deriv : ∀ x ∈ Set.Icc y 0, HasDerivAt f (x^2 / (1 + x)) x := by
+    intro x hx
+    have : 0 < 1 + x := by linarith [hx.1]
+    have h_neq:  1 + id x ≠ 0:= by
+      simp
+      linarith
+    unfold f
+    convert (HasDerivAt.sub
+    (HasDerivAt.log (hasDerivAt_id x |>.const_add 1) h_neq)
+    (hasDerivAt_id x)).add ((hasDerivAt_id x).pow 2 |>.div_const 2) using 1
+    simp
+    field_simp
+    ring_nf
+  have hfy : f y ≤ 0 := by
+    have hf0 : f 0 = 0 := by
+      simp [f]
+    rw [← hf0]
+    have h_mono : MonotoneOn f (Icc y 0) := by
+      apply monotoneOn_of_deriv_nonneg (convex_Icc y 0)
+      · apply ContinuousOn.add
+        · apply ContinuousOn.sub
+          · apply ContinuousOn.log
+            refine Continuous.continuousOn ?_
+            continuity
+            intro z hz; linarith [hy_gt, hz.1]
+          · exact continuousOn_id
+        · refine Continuous.continuousOn ?_
+          continuity
+      · intro x hx
+        have hx_mem : x ∈ Icc y 0 := by
+          rw [interior_Icc] at hx
+          exact Ioo_subset_Icc_self hx
+        exact (h_deriv x hx_mem).differentiableAt.differentiableWithinAt
+      · intro u hu
+        have hu_mem : u ∈ Icc y 0 := by
+          rw [interior_Icc] at hu
+          exact Ioo_subset_Icc_self hu
+        rw [(h_deriv u hu_mem).deriv]
+        have hu_gt_neg1 : -1/2 < u := by
+          rw [interior_Icc] at hu
+          linarith [hy_gt, hu.1]
+        have h_den : 0 < 1 + u := by linarith  [hu_gt_neg1]
+        have h_pos : 0 ≤ u^2 / (1 + u) := by
+          positivity
+        exact h_pos
+    apply h_mono
+    · exact left_mem_Icc.mpr hy_le
+    · exact right_mem_Icc.mpr hy_le
+    · exact hy_le
+  unfold f at hfy
+  linarith
+
+lemma h_log_ineq_neg2 : ∀ y, -1<y → y <0 → Real.log (1 + y)/y ≤ 1/(1+y) := by
+  intro y hy_gt hy_lt
+
+  let f := fun t ↦ t  / (1+t)-Real.log (1 +t)
+  have h_deriv : ∀ x ∈ Set.Icc y 0, HasDerivAt f  ( 1/(1+x)^2-1/(1+x) ) x := by
+    intro x hx
+
+    have : 0 < 1 + x := by linarith [hx.1]
+    have h_neq:  1 + id x ≠ 0:= by
+      simp
+      linarith
+    unfold f
+    apply HasDerivAt.sub
+    · have h_u : HasDerivAt (fun t ↦ t) 1 x := hasDerivAt_id x
+      have h_v : HasDerivAt (fun t ↦ 1 + t) 1 x := by
+        convert (hasDerivAt_const x 1).add (hasDerivAt_id x)
+        simp
+      have h_div := HasDerivAt.div h_u h_v (by linarith)
+      field_simp at h_div
+      have :  (1:ℝ) + x -x = (1:ℝ):= by
+        ring_nf
+      rw[this] at h_div
+      convert h_div using 1
+    · let f:= fun t:ℝ ↦ 1+t
+      let f':= fun t:ℝ ↦ (1:ℝ)
+      have hx_pos : f x ≠ 0 := by
+        unfold f
+        linarith[hx.left, hy_gt]
+      have derivf: HasDerivAt f ((0:ℝ)+ (1:ℝ)) x:= by
+        unfold f
+        apply HasDerivAt.add
+        · exact hasDerivAt_const x 1
+        · exact hasDerivAt_id x
+      have: (0:ℝ)+ 1=f' x:= by
+        unfold f'
+        simp
+      rw[this] at derivf
+      have h_log : HasDerivAt (fun t ↦ Real.log (1 + t)) (1 / (1 + x)) x := by
+        let h:=HasDerivAt.log derivf hx_pos
+        unfold f f' at h
+        exact h
+      exact h_log
+
+  have hfy : f y ≤  0 := by
+    have hf0 : f 0 = 0 := by
+      simp [f]
+    rw [← hf0]
+    have h_mono : MonotoneOn f (Icc y 0) := by
+      unfold f
+      apply monotoneOn_of_deriv_nonneg (convex_Icc y 0)
+      · apply ContinuousOn.add
+        · apply ContinuousOn.div
+          · exact continuousOn_id
+          · refine Continuous.continuousOn ?_
+            continuity
+          · intro x hx
+            have hx_low : y ≤ x := (mem_Icc.mp hx).1
+            have hx_gt_neg1 : -1 < x := lt_of_lt_of_le hy_gt hx_low
+            linarith
+        · apply ContinuousOn.neg
+          apply ContinuousOn.log
+          refine Continuous.continuousOn ?_
+          continuity
+          intro x hx
+          have hx_low : y ≤ x := (mem_Icc.mp hx).1
+          have hx_gt_neg1 : -1 < x := lt_of_lt_of_le hy_gt hx_low
+          linarith
+
+      · intro x hx
+        have hx_mem : x ∈ Icc y 0 := by
+          rw [interior_Icc] at hx
+          exact Ioo_subset_Icc_self hx
+        exact (h_deriv x hx_mem).differentiableAt.differentiableWithinAt
+      · intro u hu
+        have hu_mem : u ∈ Icc y 0 := by
+          rw [interior_Icc] at hu
+          exact Ioo_subset_Icc_self hu
+        rw [(h_deriv u hu_mem).deriv]
+        have hu_gt_neg1 : -1 < u := by
+          rw [interior_Icc] at hu
+          have:= hu.1
+          linarith
+        have h_den : 0 < 1 + u := by linarith  [hu_gt_neg1]
+        field_simp [h_den.ne']
+        ring_nf
+        rw [interior_Icc] at hu
+        have := hu.2
+        linarith
+    apply h_mono
+    · exact left_mem_Icc.mpr hy_lt.le
+    · exact right_mem_Icc.mpr hy_lt.le
+    exact hy_lt.le
+  unfold f at hfy
+  have h_rw:  (y:ℝ)  / (1 + y) ≤ Real.log (1 + y) := by linarith
+  have: (y:ℝ )/ (1 + y)=y * (1/(1 + y)):=by
+    field_simp
+  rw[this] at h_rw
+  have h_div := (div_le_iff_of_neg'  (a:= 1/(1 + y)) (b:=Real.log (1 + y))  hy_lt).mpr h_rw
+  exact h_div
+
+
+
+theorem integral_sinc_sq_times_exp_eq (x : ℝ) (hx : 0 < x) :
+    integral_sinc_sq_times_exp x = x/4*Real.log (x^2/(4+x^2))+ Real.arctan (2/x) := by
+    let G := fun t => t/4*Real.log (t^2/(4+t^2))+ Real.arctan (2/t)
+    let H := fun t => integral_sinc_sq_times_exp t - G t
+    have G_diff:  ∀ y >0 , HasDerivAt G (1/4*Real.log (y^2/(4+y^2))) y := by
+      intro y hy
+      have h_log_deriv : HasDerivAt (fun t ↦ Real.log (t^2 / (4 + t^2))) (2/y - 2*y/(4+y^2)) y := by
+
+        have : (fun t ↦ Real.log (t^2 / (4 + t^2))) =ᶠ[𝓝 y] (fun t ↦ 2 * Real.log t - Real.log (4 + t^2)) := by
+          filter_upwards [eventually_gt_nhds hy] with t ht
+          rw [Real.log_div (pow_ne_zero 2 ht.ne') (by positivity)]
+          rw [Real.log_pow]
+          rfl
+
+        refine HasDerivAt.congr_of_eventuallyEq ?_ this
+        apply HasDerivAt.sub
+        · apply HasDerivAt.const_mul 2
+          have hy_neq: y≠0 := by
+            linarith
+          exact hasDerivAt_log hy_neq
+        · let f:= fun (t:ℝ)↦ 4 + t ^ 2
+          let f':= fun (t:ℝ)↦ 2*t
+          have hf_y: f y ≠ 0:= by
+            unfold f
+            have: 4+y^2>0:= by
+              nlinarith
+            linarith
+          have hf_deriv: HasDerivAt f (f' y) y:= by
+            unfold f f'
+            have: 2*y= 0 +2*y:= by
+              simp
+            rw[this]
+            apply HasDerivAt.add
+            · exact hasDerivAt_const y 4
+            · let h:= hasDerivAt_pow 2 y
+              simp at h
+              exact h
+          apply HasDerivAt.log hf_deriv hf_y
+
+      have h_arctan_deriv : HasDerivAt (fun t ↦ Real.arctan (2/t)) ( -2/(4+y^2)) y := by
+        have h_neq_y: id y ≠ 0:= by
+          simp
+          linarith
+        have h := HasDerivAt.arctan (hasDerivAt_const y 2 |>.div (hasDerivAt_id y) h_neq_y)
+        simp at h
+        convert h using 1
+        field_simp [hy]
+        ring_nf
+
+      have h_prod_deriv : HasDerivAt (fun t:ℝ ↦ t / 4 * Real.log (t ^ 2 / (4 + t ^ 2))) (1 / 4 * Real.log (y ^ 2 / (4 + y ^ 2)) + (y / 4) * (2 / y - 2 * y / (4 + y ^ 2))) y := by
+        apply HasDerivAt.mul
+        · simp only [div_eq_inv_mul]
+          apply HasDerivAt.const_mul
+          exact hasDerivAt_id y
+        · exact h_log_deriv
+
+      have h_G_full := h_prod_deriv.add h_arctan_deriv
+      convert h_G_full using 1
+      field_simp [hy.ne.symm, (by nlinarith : 4 + y^2 ≠ 0)]
+      have: 4 + y ^ 2 - y ^ 2= (4:ℝ):= by
+        simp
+      rw[this]
+      ring_nf
+
+    have h_deriv_eq : ∀ y >0 ,
+      HasDerivAt integral_sinc_sq_times_exp (1 / 4 * Real.log (y ^ 2 / (4 + y ^ 2))) y ∧
+      HasDerivAt G (1 / 4 * Real.log (y ^ 2 / (4 + y ^ 2))) y := by
+        intro y hy
+        refine ⟨hasDeriv_integral_sinc_sq_times_exp' y hy, ?_⟩
+        exact G_diff y hy
+
+
+    have h_Hdiff : DifferentiableOn ℝ H (Set.Ioi 0) := by
+      intro y hy
+      have hF_diff : DifferentiableAt ℝ integral_sinc_sq_times_exp y :=
+    (hasDeriv_integral_sinc_sq_times_exp' y hy).differentiableAt
+      have hG : DifferentiableAt ℝ G y :=
+        (G_diff y hy).differentiableAt
+
+      exact (hF_diff.sub hG).differentiableWithinAt
+
+
+    have h_Hzero: ∀ y > 0, HasDerivAt (fun y =>H y) 0 y := by
+      intro y hy
+      have hF := (h_deriv_eq y hy).1
+      have hG := (h_deriv_eq y hy).2
+      simpa using hF.sub hG
+
+    have h_Hzero' : EqOn (deriv H) 0 (Set.Ioi 0) := by
+      intro y hy
+      have h := h_Hzero y hy
+      simpa using h.deriv
+
+    have hIoi_open : IsOpen (Set.Ioi (0 : ℝ)) :=
+      isOpen_Ioi
+
+    have hIoi_preconnected : IsPreconnected (Set.Ioi (0 : ℝ)) :=
+      isPreconnected_Ioi
+
+    have h_lim : Tendsto H atTop (𝓝 0) := by
+      have hF_lim : Tendsto integral_sinc_sq_times_exp atTop (𝓝 0) := by
+        let h:= tendsto_integral_sinc_sq_times_exp
+        exact h
+
+      have hG_lim : Tendsto G atTop (𝓝 0) := by
+        unfold G
+        have:  (𝓝 (0:ℝ))= (𝓝 ((0:ℝ)+(0:ℝ))):= by simp
+        simp_rw[this]
+        apply Tendsto.add
+        · let u := fun t:ℝ ↦ -4 / (4 + t^2)
+          have h_u : Tendsto u atTop (𝓝 0) := by
+            apply tendsto_const_nhds.div_atTop
+            apply tendsto_const_nhds.add_atTop
+            exact tendsto_pow_atTop (by norm_num)
+
+          have h_equiv : (fun t ↦ t / 4 * Real.log (t^2 / (4 + t^2))) =
+                     (fun t ↦ (t * (-4 / (4 + t^2)) / 4) * (Real.log (1 + u t) / u t)) := by
+            ext t
+            unfold u
+            field_simp
+            ring_nf
+
+          rw [h_equiv]
+          have: (𝓝 (0:ℝ ))= (𝓝 ((0:ℝ )*(1:ℝ ))):= by simp
+          rw[this]
+          apply Tendsto.mul
+          · field_simp
+            have: (𝓝 (0:ℝ )) = 𝓝 (-(0:ℝ)):= by simp
+            rw[this]
+            apply Tendsto.neg
+            apply tendsto_of_tendsto_of_tendsto_of_le_of_le' (f:= fun x:ℝ↦ x / (4 + x ^ 2)) (g := fun _ ↦ 0) (h:= fun x:ℝ ↦ x / x ^ 2)
+            · exact tendsto_const_nhds
+            · have h: 1<2 := by linarith
+              have:(fun x:ℝ ↦ x / x ^ 2)= fun x:ℝ ↦ x ^1 / x ^ 2:= by simp
+              simp_rw[this]
+              exact tendsto_pow_div_pow_atTop_zero (p:=1) (q:=2) h
+            · filter_upwards [eventually_gt_atTop 0] with x hx
+              positivity
+            · filter_upwards [eventually_gt_atTop 0] with x hx
+              field_simp
+              ring_nf
+              linarith
+          · let lower_x :=fun t:ℝ  ↦ 1-(u t)/2
+            let upper_x := fun t:ℝ  ↦ 1/(1+u t)
+            apply tendsto_of_tendsto_of_tendsto_of_le_of_le' (f:=fun x:ℝ↦  Real.log (1 + u x) / u x) (g:=lower_x) (h:= upper_x)
+            · unfold lower_x
+              have : (𝓝 (1:ℝ) )= (𝓝 ((1:ℝ)-(0:ℝ) )):= by simp
+              rw[this]
+              apply Tendsto.sub
+              · exact tendsto_const_nhds
+              · have : (𝓝 (0:ℝ) )= (𝓝 ((0:ℝ)/(2:ℝ) )):= by simp
+                rw[this]
+                apply Tendsto.div
+                · exact h_u
+                · exact tendsto_const_nhds
+                · linarith
+            · unfold upper_x
+              have : (𝓝 (1:ℝ) )= (𝓝 ((1:ℝ)/(1:ℝ) )):= by simp
+              rw[this]
+              apply Tendsto.div
+              · exact tendsto_const_nhds
+              · have : (𝓝 (1:ℝ) )= (𝓝 ((1:ℝ)  +(0:ℝ) )):= by simp
+                rw[this]
+                apply Tendsto.add
+                · exact tendsto_const_nhds
+                · exact h_u
+              linarith
+            · unfold lower_x
+              have h_eventually : ∀ᶠ t in atTop, -1/2 < u t := by
+                apply h_u.eventually
+                apply eventually_gt_nhds
+                linarith
+              have h_u_neg : ∀ᶠ b in atTop, u b < 0 := by
+                filter_upwards with b
+                unfold u
+                have : 0 < 4 + b^2 := by positivity
+                field_simp [this]
+                ring_nf
+                linarith
+
+              have h_log_ineq : ∀ᶠ (b : ℝ) in atTop, 1 - u b / 2 ≤ Real.log (1 + u b) / u b := by
+                filter_upwards [h_eventually, h_u_neg] with b hb hb_neg
+                rw[le_div_iff_of_neg hb_neg]
+
+                have h := h_log_ineq_neg1 (u b) hb hb_neg.le
+                linarith
+
+              exact h_log_ineq
+            · unfold upper_x
+              have h_eventually : ∀ᶠ t in atTop, -1 < u t := by
+                apply h_u.eventually
+                apply eventually_gt_nhds
+                linarith
+              have h_u_neg : ∀ᶠ b in atTop, u b < 0 := by
+                filter_upwards with b
+                unfold u
+                have : 0 < 4 + b^2 := by positivity
+                field_simp [this]
+                ring_nf
+                linarith
+              filter_upwards [h_eventually,h_u_neg] with b hb_one hb_zero
+              have:= h_log_ineq_neg2 ( u b) hb_one hb_zero
+              exact this
+
+        · have h_inv : Tendsto (fun x:ℝ ↦ 2 / x) atTop (𝓝 0) := by
+            apply tendsto_const_nhds.div_atTop
+            exact tendsto_id
+          have h_cont : Tendsto Real.arctan (𝓝 0) (𝓝 (Real.arctan 0)) :=
+            Real.continuous_arctan.continuousAt.tendsto
+          rw [Real.arctan_zero] at h_cont
+          exact h_cont.comp h_inv
+
+      unfold H
+      have: (𝓝 (0:ℝ ))= (𝓝 ((0:ℝ )-(0:ℝ ))):= by simp
+      rw[this]
+      apply Tendsto.sub
+      · exact hF_lim
+      · exact hG_lim
+
+    have h_const : ∀ a ∈ Ioi 0, ∀ b ∈ Ioi 0, H a = H b := by
+      intro a ha
+      intro b hb
+      apply IsOpen.is_const_of_deriv_eq_zero hIoi_open hIoi_preconnected h_Hdiff h_Hzero' ha hb
+
+    have h_is_zero : ∀ y ∈ Ioi 0, H y = 0 := by
+      intro y hy
+      have h_ev : H =ᶠ[atTop] (fun _ ↦ H y) := by
+        filter_upwards [eventually_gt_atTop 0] with b hb
+        exact h_const b hb y hy
+      apply tendsto_nhds_unique _ h_lim
+      have h_lim_const : Tendsto H atTop (𝓝 (H y)) := by
+        exact tendsto_const_nhds.congr' h_ev.symm
+      exact h_lim_const
+    unfold H G at h_is_zero
+
+    exact sub_eq_zero.mp (h_is_zero x hx)
+
+theorem integral_sinc_sq_eq_pi_div_two :
+    ∫ t in Ioi 0, (sinc t)^2 = π / 2 := by
+  have h_lim_int : Tendsto (fun x => integral_sinc_sq_times_exp x) (𝓝[>] 0) (𝓝 (∫ t in Ioi 0, (sinc t)^2)) := by
+    refine tendsto_integral_filter_of_dominated_convergence (fun t => (Real.sinc t)^2) ?_ ?_ ?_ ?_
+    · filter_upwards [self_mem_nhdsWithin] with x (hx : 0 < x)
+      apply ContinuousOn.aestronglyMeasurable
+      unfold sinc_sq_times_exp
+      apply ContinuousOn.mul
+      · apply Continuous.continuousOn
+        apply Continuous.rexp
+        continuity
+      · apply Continuous.continuousOn
+        apply Continuous.pow
+        exact Real.continuous_sinc
+      · exact measurableSet_Ioi
+    · filter_upwards [self_mem_nhdsWithin] with u (hu : 0 < u)
+      rw [ae_restrict_iff' measurableSet_Ioi]
+      refine ae_of_all _ (fun t (ht : 0 < t) => ?_)
+      unfold sinc_sq_times_exp
+      rw [norm_mul, Real.norm_eq_abs, Real.norm_eq_abs]
+      rw [abs_of_nonneg (exp_pos _).le]
+      simp
+      refine mul_le_of_le_one_left (sq_nonneg _) ?_
+      rw [exp_le_one_iff]
+      nlinarith
+    ·exact integrable_sinc_sq
+    · rw [ae_restrict_iff' measurableSet_Ioi]
+      refine ae_of_all _ (fun t (ht : 0 < t) => ?_)
+      unfold sinc_sq_times_exp
+      have : 𝓝 (sinc t ^ 2)= 𝓝 (1*sinc t ^ 2):= by simp
+      rw[this]
+      apply Tendsto.mul
+      · apply (tendsto_exp_nhds_zero_nhds_one.comp ?_)
+        have h0 : Tendsto (fun n:ℝ
+           ↦ n) (𝓝[>] 0) (𝓝 0) :=
+          tendsto_id.mono_left nhdsWithin_le_nhds
+        have: 𝓝 ( 0:ℝ ) = 𝓝 (-0 * t):= by simp
+        rw[this]
+        exact h0.neg.mul_const t
+      · exact tendsto_const_nhds
+  have h_lim_int2 : Tendsto (fun x ↦ integral_sinc_sq_times_exp x) (𝓝[>] 0) (𝓝 (π / 2)) := by
+    refine (tendsto_congr' (f₁ := fun x ↦ integral_sinc_sq_times_exp x) (f₂ := fun x ↦ (x / 4) * Real.log (x^2 / (4 + x^2)) + Real.arctan (2 / x)) ?_).mpr ?_
+    · filter_upwards [self_mem_nhdsWithin] with x hx
+      exact integral_sinc_sq_times_exp_eq x hx
+    · have h_lim_arctan : Tendsto (fun x:ℝ ↦ Real.arctan (2 / x)) (𝓝[>] (0:ℝ)) (𝓝 ((π:ℝ ) / 2)) := by
+        have h_atTop : Tendsto (fun x:ℝ  ↦ 2 / x) (𝓝[>] 0) atTop := by
+          have h_rewrite : (fun x:ℝ ↦ 2 / x) = (fun x ↦ 2 * (1 / x)) := by
+            ext x
+            ring_nf
+          rw [h_rewrite]
+          apply Tendsto.const_mul_atTop (by norm_num : (0 : ℝ) < 2)
+          simp[HDiv.hDiv,  Div.div,  DivInvMonoid.div']
+          exact tendsto_inv_nhdsGT_zero
+        exact (Real.tendsto_arctan_atTop.comp h_atTop).mono_right nhdsWithin_le_nhds
+      have h_lim_log : Tendsto (fun x ↦ (x / 4) * Real.log (x^2 / (4 + x^2))) (𝓝[>] 0) (𝓝 0) := by
+        let g := fun x:ℝ ↦ (1 / 2) * (x * Real.log x) - (x / 4) * Real.log (4 + x^2)
+        refine (tendsto_congr' (f₁ := fun x:ℝ ↦ (x / 4) * Real.log (x^2 / (4 + x^2))) (f₂ := g) ?_).mpr ?_
+        · filter_upwards [self_mem_nhdsWithin] with x (hx : 0 < x)
+          have hx_ne : x ≠ 0 := hx.ne'
+          have hx_sq_ne : x^2 ≠ 0 := by nlinarith
+          have h_pos :  4 + x^2≠ 0 := by linarith [pow_two_nonneg x]
+          rw [Real.log_div hx_sq_ne h_pos, Real.log_pow, mul_sub]
+          ring
+        · unfold g
+          have: (𝓝 (0:ℝ))= (𝓝 (0-0:ℝ)):= by
+            simp
+          rw[this]
+          apply Tendsto.sub
+          · have h_zero : (0 : ℝ) = (1 / 2) * 0 := by simp
+            rw [h_zero]
+            apply Tendsto.mul
+            · exact tendsto_const_nhds
+            · let g := fun u ↦ Real.exp (-u) * Real.log (Real.exp (-u))
+              have h_comp : Tendsto g atTop (𝓝 0) := by
+                have h_g_eq : ∀ u, g u = - (u * Real.exp (-u)) := by
+                  intro u
+                  simp [g]
+                  ring
+                have h_growth := Real.tendsto_pow_mul_exp_neg_atTop_nhds_zero 1
+                simp at h_growth
+                have : Tendsto (fun u ↦ - (u * Real.exp (-u))) atTop (𝓝 (-0)) :=
+                  h_growth.neg
+                simp at this
+                rw [funext h_g_eq]
+                exact this
+              simp
+              have h_final : Tendsto (fun x ↦ g (- Real.log x)) (𝓝[>] 0) (𝓝 0) := by
+                apply h_comp.comp
+                have h_log := Real.tendsto_log_nhdsGT_zero
+                exact tendsto_neg_atBot_atTop.comp h_log
+              unfold g at h_final
+              simp at h_final
+              refine (tendsto_congr' ?_).mp h_final
+              filter_upwards [self_mem_nhdsWithin] with x hx
+              rw [Real.exp_log hx]
+          · have: (𝓝 (0:ℝ))= (𝓝 (0*    Real.log 4)):= by simp
+            rw[this]
+            apply Tendsto.mul
+            · apply   tendsto_nhdsWithin_of_tendsto_nhds
+              have h_cont : Continuous (fun x : ℝ ↦ x / 4) := by
+                exact continuous_id.div_const (4:ℝ )
+              have h_lim := h_cont.tendsto 0
+              simp at h_lim
+              exact h_lim
+            · apply   tendsto_nhdsWithin_of_tendsto_nhds
+              apply Tendsto.log
+              · have h_cont : Continuous (fun x:ℝ ↦ 4 + x ^ 2) := by
+                  apply Continuous.add
+                  exact continuous_const
+                  apply Continuous.pow
+                  continuity
+                have h_lim := h_cont.tendsto 0
+                simp at h_lim
+                exact h_lim
+              · linarith
+      have h_somme := h_lim_log.add h_lim_arctan
+      simp at h_somme
+      exact h_somme
+  exact tendsto_nhds_unique h_lim_int h_lim_int2
+
+
+
+
+
+Real.tendsto_pow_mul_exp_neg_atTop_nhds_zero
+
+
+
+
+
+
+
 
 theorem integral_dirichlet_from_Feynman :
     Tendsto integral_sin_div_times_exp (𝓝[>] 0) (𝓝 (π / 2)) := by
@@ -616,3 +1776,255 @@ theorem integral_dirichlet_from_Feynman :
       exact h.mono_left nhdsWithin_le_nhds
     have h_const : Tendsto (fun _ : ℝ ↦ π / 2) (𝓝[>] 0) (𝓝 (π / 2)) := tendsto_const_nhds
     simpa using h_const.sub h_atan
+
+
+
+
+
+
+
+
+
+
+
+
+
+  have h1 :
+    ∫ t in a / 2..T / 2, Real.sin (2 * t) / t
+      =
+    ∫ t in a / 2..T / 2, sinc t ^ 2
+      -
+    (sinc (a / 2) ^ 2 * (a / 2)
+      - sinc (T / 2) ^ 2 * (T / 2)) :=
+      by exact eq_sub_of_add_eq' h_new
+
+
+ lemma h_lim_sinc_int: Tendsto (fun p : ℝ × ℝ => ∫ t in p.1/(2:ℝ)..p.2/(2:ℝ), (Real.sinc t)^2)
+    ((nhdsWithin 0 (Set.Ioi (0 : ℝ)))×ˢ(atTop : Filter ℝ)) (nhds (∫ t in Set.Ioi 0, (Real.sinc t)^2)) := by
+    let FilterA := (nhdsWithin 0 (Set.Ioi (0 : ℝ)))
+    let FilterT := (atTop : Filter ℝ)
+    let F := FilterA ×ˢ FilterT
+    have h_congr : (fun p : ℝ × ℝ => ∫ t in p.1/(2:ℝ)..p.2/(2:ℝ), (Real.sinc t)^2) =
+                 (fun p => (∫ t in 0..p.2/(2:ℝ), (Real.sinc t)^2) - (∫ t in 0..p.1/(2:ℝ), (Real.sinc t)^2)) := by
+      ext p
+      rw [←intervalIntegral.integral_interval_sub_left (a := 0)]
+      apply Continuous.intervalIntegrable
+      exact Real.continuous_sinc.pow 2
+      apply Continuous.intervalIntegrable
+      exact Real.continuous_sinc.pow 2
+    simp_rw [h_congr]
+    have hT : Tendsto (fun p : ℝ × ℝ => ∫ t in 0..p.2/(2:ℝ), (Real.sinc t)^2) F (𝓝 (∫ t in Ioi 0, (Real.sinc t)^2)) := by
+      apply intervalIntegral_tendsto_integral_Ioi 0
+      ·exact integrable_sinc_sq
+      · have: Tendsto (fun i ↦ i.2) F atTop := by
+          exact tendsto_snd
+        have h : Tendsto (fun i :ℝ× ℝ ↦ i.2 / 2) F atTop := by
+          let c : ℝ := 1/2
+          have hc : 0 < c := by
+            norm_num
+          have h_eq : (fun( T:ℝ× ℝ) ↦ T.2/ 2) = (fun T ↦ T.2 * c) := by
+            unfold c; ext; field_simp;
+
+          simp_rw[h_eq]
+          have h_t : Tendsto (fun x ↦ x * c) atTop atTop := tendsto_id.atTop_mul_const hc
+          exact h_t.comp this
+        exact h
+
+    have hA : Tendsto (fun p : ℝ × ℝ => ∫ t in 0..p.1/2, (Real.sinc t)^2) F (𝓝 0) := by
+      have h_int : ∀ (a b : ℝ), IntervalIntegrable (fun t↦(Real.sinc t)^2) volume a b := by
+        intro a b
+        apply Continuous.intervalIntegrable
+        exact Real.continuous_sinc.pow 2
+
+      have h_cont : Continuous (fun a => ∫ t in 0..a, (Real.sinc t)^2) :=
+        intervalIntegral.continuous_primitive h_int 0
+
+      have h_lim := h_cont.tendsto 0
+      let f := fun p:ℝ × ℝ ↦ p.1 / 2
+      have h_lim_p1 : Tendsto (fun p ↦ p.1) F (𝓝[>] 0) := tendsto_fst
+      have h_f : Tendsto (fun p ↦ p.1 / 2) F (𝓝 0) := by
+
+        let c : ℝ := 1/2
+        have hc : 0 < c := by norm_num
+        have h_eq : (fun( a:ℝ× ℝ) ↦ a.1 / 2) = (fun a ↦ a.1* c) := by
+          unfold c; ext; field_simp;
+        rw[h_eq]
+        have h_f_proj: Tendsto (fun a ↦ a * c) (𝓝[>] 0) (𝓝 0):= by
+          have: Tendsto (fun a ↦ a * c) (𝓝 0) (𝓝 (0 * c)) := by
+            exact tendsto_id.mul_const c
+          simp at this
+          exact this.mono_left nhdsWithin_le_nhds
+        exact h_f_proj.comp h_lim_p1
+      have h_final : Tendsto (fun p ↦ ∫ (t : ℝ) in 0..p.1 / 2, sinc t ^ 2) F (𝓝 (∫ (t : ℝ) in 0..0, sinc t ^ 2)) :=
+        h_lim.comp h_f
+      simp at h_final
+      exact h_final
+
+    have h_sub := hT.sub hA
+    simp only [sub_zero] at h_sub
+    exact h_sub
+
+  lemma h_lim_T: Tendsto (fun T ↦ (sinc (T / 2))^2 * (T / 2)) (atTop : Filter ℝ) (𝓝 0) := by
+    let FilterT := (atTop : Filter ℝ)
+    let g := fun t ↦ (sinc t)^2 * t
+    let f:= fun (T:ℝ) ↦ T / 2
+    have h_comp : Tendsto (fun (T:ℝ) ↦ T / 2) FilterT FilterT := by
+      let c : ℝ := 1/2
+      have hc : 0 < c := by norm_num
+      have h_eq : (fun( T:ℝ) ↦ T / 2) = (fun T ↦ T * c) := by
+        unfold c; ext; field_simp;
+      rw[h_eq]
+      apply tendsto_id.atTop_mul_const hc
+    have: (fun a ↦ sinc (a / 2) ^ 2 * (a / 2)) = fun a ↦ (g∘ f) a:= by
+      unfold f g
+      simp
+    rw[this]
+    refine Tendsto.comp (y := atTop) ?_ h_comp
+    unfold g
+    exact limit_sinc_sq_mul_self_atTop
+
+  lemma h_lim_a: Tendsto (fun a ↦ (sinc (a / 2))^2 * (a / 2)) (nhdsWithin 0 (Set.Ioi (0 : ℝ))) (𝓝 0) := by
+    let g := fun x ↦ sinc x ^ 2 * x
+    let f := fun a:ℝ ↦ a / 2
+    have h_comp : Tendsto (fun (a:ℝ) ↦ a / 2) (nhdsWithin 0 (Set.Ioi (0 : ℝ))) (nhdsWithin 0 (Set.Ioi (0 : ℝ))) := by
+      let c : ℝ := 1/2
+      have hc : 0 < c := by norm_num
+      have h_eq : (fun( a:ℝ) ↦ a / 2) = (fun a ↦ a* c) := by
+        unfold c; ext; field_simp;
+      rw[h_eq]
+      rw[tendsto_nhdsWithin_iff]
+      constructor
+      · have h_std : Tendsto (fun a ↦ a * c) (𝓝 0) (𝓝 (0 * c)) := by
+          exact tendsto_id.mul_const c
+        simp at h_std
+        exact h_std.mono_left nhdsWithin_le_nhds
+      · filter_upwards [self_mem_nhdsWithin] with n hn
+        rw [Set.mem_Ioi] at hn
+        unfold c
+        simp
+        exact hn
+    have: (fun a ↦ sinc (a / 2) ^ 2 * (a / 2)) = fun a ↦ (g∘ f) a:= by
+      unfold f g
+      simp
+    rw[this]
+    apply Tendsto.comp
+    · exact limit_sinc_sq_mul_self_zero
+    · exact h_comp
+
+
+lemma limit_expression_sinc_sq :
+  Tendsto (fun (p : ℝ × ℝ) => (∫ t in (p.1/2)..(p.2/2), (Real.sinc t)^2) - (Real.sinc (p.1/2))^2 * (p.1/2) + (Real.sinc (p.2/2))^2 * (p.2/2))
+  (nhdsWithin 0 (Set.Ioi 0) ×ˢ atTop) (nhds (∫ t in Set.Ioi 0, (Real.sinc t)^2)) := by
+  let FilterA := (nhdsWithin 0 (Set.Ioi (0 : ℝ)))
+  let FilterT := (atTop : Filter ℝ)
+  let F := FilterA ×ˢ FilterT
+
+  have h_lim_1: Tendsto (fun p : ℝ × ℝ => ∫ t in p.1/2..p.2/2, (Real.sinc t)^2)
+    ((nhdsWithin 0 (Set.Ioi (0 : ℝ)))×ˢ(atTop : Filter ℝ)) (nhds (∫ t in Set.Ioi 0, (Real.sinc t)^2)):= h_lim_sinc_int
+  have h_lim_2 : Tendsto (fun p ↦ sinc (p.1 / 2) ^ 2 * (p.1 / 2)) F (𝓝 0) :=
+    h_lim_a.comp tendsto_fst
+  have h_lim_3 : Tendsto (fun p ↦ sinc (p.2 / 2) ^ 2 * (p.2 / 2)) F (𝓝 0) :=
+    h_lim_T.comp tendsto_snd
+  have h_sub := h_lim_1.sub h_lim_2
+  have h_final := h_sub.add h_lim_3
+  simp at *
+  exact h_final
+
+
+
+
+
+
+
+theorem integral_sinc_sq_eq_integral_sinc :
+    ∫ t in Set.Ioi 0, (Real.sinc t)^2 = ∫ t in Set.Ioi 0, Real.sinc t := by
+  let I := ∫ t in Set.Ioi 0, (Real.sinc t)^2
+  let J := ∫ t in Set.Ioi 0, Real.sinc t
+  let FiltreA := (nhdsWithin 0 (Set.Ioi (0 : ℝ)))
+  let FilterT := (atTop : Filter ℝ)
+  let FilterProduct := FiltreA ×ˢ FilterT
+
+  have h_lim_f : Tendsto (fun p : ℝ × ℝ => ∫ t in p.1..p.2, (Real.sinc t)^2)
+    FilterProduct (nhds (∫ t in Set.Ioi 0, (Real.sinc t)^2)) := by
+    have h_congr : (fun p : ℝ × ℝ => ∫ t in p.1..p.2, (Real.sinc t)^2) =
+                 (fun p => (∫ t in 0..p.2, (Real.sinc t)^2) - (∫ t in 0..p.1, (Real.sinc t)^2)) := by
+      ext p
+      rw [←intervalIntegral.integral_interval_sub_left (a := 0)]
+      apply Continuous.intervalIntegrable
+      exact Real.continuous_sinc.pow 2
+      apply Continuous.intervalIntegrable
+      exact Real.continuous_sinc.pow 2
+    simp_rw [h_congr]
+    have hT : Tendsto (fun p : ℝ × ℝ => ∫ t in 0..p.2, (Real.sinc t)^2) FilterProduct (𝓝 (∫ t in Ioi 0, (Real.sinc t)^2)) := by
+      apply intervalIntegral_tendsto_integral_Ioi 0
+      ·exact integrable_sinc_sq
+      · exact tendsto_snd
+    have hA : Tendsto (fun p : ℝ × ℝ => ∫ t in 0..p.1, (Real.sinc t)^2) FilterProduct (𝓝 0) := by
+      have h_int : ∀ (a b : ℝ), IntervalIntegrable (fun t↦(Real.sinc t)^2) volume a b := by
+        intro a b
+        apply Continuous.intervalIntegrable
+        exact Real.continuous_sinc.pow 2
+
+      have h_cont : Continuous (fun a => ∫ t in 0..a, (Real.sinc t)^2) :=
+        intervalIntegral.continuous_primitive h_int 0
+
+      have h_lim := h_cont.tendsto 0
+      simp only [intervalIntegral.integral_same] at h_lim
+      exact h_lim.comp (tendsto_fst.mono_left (Filter.prod_mono nhdsWithin_le_nhds le_rfl))
+
+    have h_sub := hT.sub hA
+    simp only [sub_zero] at h_sub
+    exact h_sub
+
+  have h_lim_g : Tendsto (fun p : ℝ × ℝ => ∫ t in p.1..p.2, Real.sinc t) FilterProduct (𝓝 J) := by
+    have h_congr : (fun p : ℝ × ℝ => ∫ t in p.1..p.2, Real.sinc t) =
+                 (fun p => (∫ t in 0..p.2, Real.sinc t) - (∫ t in 0..p.1, Real.sinc t)) := by
+      ext p
+      rw [←intervalIntegral.integral_interval_sub_left (a := 0)]
+      apply Continuous.intervalIntegrable
+      exact Real.continuous_sinc
+      apply Continuous.intervalIntegrable
+      exact Real.continuous_sinc
+    rw[h_congr]
+    have h_lim_top : Tendsto (fun p ↦ ∫ t in 0..p.2, sinc t) FilterProduct (𝓝 J) := by
+      exact h_integrale_sinc_to_atTop.comp tendsto_snd
+  have h_lim_int : Tendsto (fun p : ℝ × ℝ => ∫ t in (2 * p.1)..(2 * p.2), Real.sinc t) FilterProduct (𝓝 J) := by
+    let map2 : ℝ × ℝ → ℝ × ℝ := fun p => (2 * p.1, 2 * p.2)
+
+    have h_map : Tendsto map2 FilterProduct FilterProduct := by
+      have h_prod_map : (fun p : ℝ × ℝ => (2 * p.1, 2 * p.2)) = Prod.map (fun x => 2 * x) (fun x => 2 * x) := by
+        ext p
+        simp [Prod.map]
+        simp
+      unfold map2
+      rw [h_prod_map]
+      apply Filter.Tendsto.prodMap
+      · have hAnew : Tendsto (fun x ↦ 2 * x) FiltreA FiltreA := by
+          have h_lim : Tendsto (fun x ↦ 2 * x) FiltreA (𝓝 0) := by
+            rw [(by ring : (0 : ℝ) = 2 * 0)]
+            exact (tendsto_id.const_mul 2).mono_left nhdsWithin_le_nhds
+          have h_pos : ∀ᶠ x in FiltreA, 2 * x ∈ Set.Ioi 0 := by
+            filter_upwards [self_mem_nhdsWithin] with x hx
+            simp at hx
+            simp
+            exact hx
+
+          rw [tendsto_nhdsWithin_iff]
+          constructor
+          ·  exact h_lim
+          ·  exact h_pos
+        exact hAnew
+      · have hTnew : Tendsto (fun x ↦ 2 * x) FilterT FilterT := by
+          rw [tendsto_atTop_atTop]
+          intro b
+          use max 0 b
+          intro a ha
+          have ha_pos : 0 ≤ a := (le_max_left 0 b).trans ha
+          have ha_b : b ≤ a := (le_max_right 0 b).trans ha
+          calc
+          b ≤ a := ha_b
+          _ ≤ a + a := le_add_of_nonneg_left ha_pos
+          _ = 2 * a := by ring
+        exact hTnew
+
+    exact hg.comp h_map
