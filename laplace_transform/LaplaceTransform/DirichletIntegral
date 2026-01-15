@@ -259,8 +259,71 @@ lemma limit_sinc_sq_mul_self_atTop :
       exact Real.neg_one_le_sin x
       exact Real.sin_le_one x
 
+lemma limit_sinc_zero (T:ℝ) (hT: T>0): Tendsto (fun (a : ℝ) ↦ ∫ t in a..T, Real.sinc t) (𝓝[>] 0) (𝓝 (∫ t in 0..T, Real.sinc t)) := by
+  let I := Set.uIcc (0:ℝ) (T:ℝ)
+  have h_int : IntegrableOn Real.sinc I :=
+    Real.continuous_sinc.integrableOn_Icc
+  have h_cont := intervalIntegral.continuousOn_primitive_interval_left h_int
+  have h_integral: Tendsto (fun (a : ℝ) ↦ ∫ t in a..T, Real.sinc t) (𝓝[>] 0) (𝓝 (∫ t in 0..T, Real.sinc t)) := by
+    apply (h_cont 0 (by simp [I])).mono_left
+    have h_eventually_lt_T : ∀ᶠ x in 𝓝[>] (0 : ℝ), x < T:= eventually_nhdsWithin_of_eventually_nhds (Iio_mem_nhds hT)
+    rw [nhdsWithin_le_iff]
+    filter_upwards [self_mem_nhdsWithin, h_eventually_lt_T] with x hx_pos hx_lt_T
+    rw [Set.mem_Ioi] at hx_pos
+    have x_min: min 0 T ≤  x:= by
+      have h_min : min 0 T= 0 := min_eq_left (le_of_lt hT)
+      linarith
+    have x_max: max 0 T ≥  x:= by
+      have h_min : max 0 T= T := max_eq_right (le_of_lt hT)
+      linarith
+    exact ⟨x_min, x_max⟩
+  exact h_integral
+
+
+lemma limit_sincsq_zero (T:ℝ) (hT: T>0): Tendsto (fun (a : ℝ) ↦ ∫ t in a/2..T/2, (Real.sinc t)^2) (𝓝[>] 0) (𝓝 (∫ t in 0..T/2, (Real.sinc t)^2)) := by
+  have hT2: T/2>0:= by
+    linarith
+  let I := Set.uIcc (0:ℝ) (T/2:ℝ)
+  let f:= fun t↦ (Real.sinc t)^2
+  have h_int : IntegrableOn f I := by
+    have h_cont_f : Continuous f := by
+      exact Real.continuous_sinc.pow 2
+    apply h_cont_f.integrableOn_Icc
+
+  have h_cont := intervalIntegral.continuousOn_primitive_interval_left h_int
+  have h_integral: Tendsto (fun (a : ℝ) ↦ ∫ t in a..T/2, (Real.sinc t)^2) (𝓝[>] 0) (𝓝 (∫ t in 0..T/2, (Real.sinc t)^2)) := by
+    apply (h_cont 0 (by simp [I])).mono_left
+    have h_eventually_lt_T : ∀ᶠ x in 𝓝[>] (0 : ℝ), x < T/2:= eventually_nhdsWithin_of_eventually_nhds (Iio_mem_nhds hT2)
+    rw [nhdsWithin_le_iff]
+    filter_upwards [self_mem_nhdsWithin, h_eventually_lt_T] with x hx_pos hx_lt_T
+    rw [Set.mem_Ioi] at hx_pos
+    have x_min: min 0 (T/2) ≤  x:= by
+      have h_min : min 0 (T/2)= 0 := min_eq_left (le_of_lt hT2)
+      linarith
+    have x_max: max 0 (T/2) ≥  x:= by
+      have h_min : max 0 (T/2)= T/2 :=     max_eq_right (le_of_lt hT2)
+      linarith
+    exact ⟨x_min, x_max⟩
+
+
+
+  have h_lim_inner : Tendsto (fun (a:ℝ) ↦ a / 2) (𝓝[>] 0) (𝓝[>] 0) := by
+    apply tendsto_nhdsWithin_iff.mpr
+    constructor
+    · have h := (tendsto_id (x := 𝓝 0)).div_const (2 : ℝ)
+      simp at h
+      exact h.mono_left nhdsWithin_le_nhds
+    · filter_upwards [self_mem_nhdsWithin (s := Ioi 0)] with a ha
+      simp at ha
+      simp
+      exact ha
+  have h_final := h_integral.comp h_lim_inner
+  exact h_final
+
+
+
 lemma integral_sinc_sq_eq_dirichlet_bounded' {a T : ℝ} (ha : 0 < a) (hT : a ≤ T) :
-  (∫ t in a.. T, Real.sinc t)= (∫ t in a/2..T/2, (Real.sinc t)^2) -(Real.sinc (a/2))^2 * (a/2) +(Real.sinc (T/2))^2*(T/2):= by
+   (∫ t in a.. T, Real.sinc t)= (∫ t in a/2..T/2, (Real.sinc t)^2) -(Real.sinc (a/2))^2 * (a/2) +(Real.sinc (T/2))^2*(T/2):= by
   have h_a_div_2: 0 < a/2:= by linarith
   have h_T_div_2: a/2 ≤ T/2:= by linarith
   have h := sinc_bounded_change_interval h_a_div_2 h_T_div_2
@@ -284,6 +347,63 @@ lemma integral_sinc_sq_eq_dirichlet_bounded' {a T : ℝ} (ha : 0 < a) (hT : a �
   rw[h_rewritten]
   ring
 
+
+
+lemma integral_sinc_zero_T (T : ℝ)(hT: T>0) :
+    (∫ t in 0..T, Real.sinc t) = (∫ t in 0..T/2,(Real.sinc t)^2) + (Real.sinc (T/2))^2 * (T/2) := by
+
+  let f := fun a ↦ ∫ t in a..T, Real.sinc t
+
+  let g := fun (a : ℝ) ↦ (∫ t in a/2..T/2, (Real.sinc t)^2) - (Real.sinc (a/2))^2 * (a/2) + (Real.sinc (T/2))^2 * (T/2)
+
+  have hf : Tendsto f (𝓝[>] 0) (𝓝 ((∫ t in 0..T, Real.sinc t) )) := limit_sinc_zero T hT
+
+  have hg : Tendsto g (𝓝[>] 0) (𝓝 ((∫ t in 0..T/2, (Real.sinc t)^2) + (Real.sinc (T/2))^2 * (T/2))) := by
+    apply Tendsto.add
+    apply Tendsto.sub
+    · have hflim:= limit_sincsq_zero T hT
+      rw [intervalIntegral.integral_of_le] at hflim
+      exact hflim
+      linarith
+    · have h_empty : ∫ (x : ℝ) in Ioc (T / 2) 0, sinc x ^ 2 = 0 := by
+        have h_range : Ioc (T / 2) 0 = ∅ := by
+          apply Set.Ioc_eq_empty
+          linarith [hT]
+        rw [h_range,MeasureTheory.setIntegral_empty]
+      rw[h_empty]
+      have:= limit_sinc_sq_mul_self_zero
+      have h_lim_inner : Tendsto (fun (a:ℝ) ↦ a / 2) (𝓝[>] 0) (𝓝[>] 0) := by
+        apply tendsto_nhdsWithin_iff.mpr
+        constructor
+        · have h := (tendsto_id (x := 𝓝 0)).div_const (2 : ℝ)
+          simp at h
+          exact h.mono_left nhdsWithin_le_nhds
+        · filter_upwards [self_mem_nhdsWithin (s := Ioi 0)] with a ha
+          simp at ha
+          simp
+          exact ha
+      have h_final := this.comp h_lim_inner
+      exact h_final
+    · exact tendsto_const_nhds
+  have h_eq : ∀ᶠ a in 𝓝[>] 0, f a = g a := by
+    have h_mem : Set.Iic T ∈ 𝓝[>] 0 := by
+      apply mem_nhdsWithin_of_mem_nhds
+      exact Iic_mem_nhds hT
+    filter_upwards [self_mem_nhdsWithin, h_mem] with a ha_pos ha_T
+    unfold f g
+    exact integral_sinc_sq_eq_dirichlet_bounded' ha_pos ha_T
+  have hf_lim_from_g : Tendsto f (𝓝[>] 0) (𝓝 ((∫ (t : ℝ) in 0..T / 2, sinc t ^ 2) + sinc (T / 2) ^ 2 * (T / 2))) := by
+    refine (tendsto_congr' ?_).mp hg
+    filter_upwards [h_eq] with x hx
+    exact hx.symm
+
+  exact tendsto_nhds_unique hf hf_lim_from_g
+
+
+
+
+
+
 def sinc_sq_times_exp (t : ℝ) : ℝ → ℝ := fun x ↦ Real.exp (-x * t) * (Real.sinc t)^2
 
 def neg_sinc_sq_times_id_exp (t : ℝ) : ℝ → ℝ := fun x ↦ -(Real.sinc t)^2  *t* Real.exp (-x * t)
@@ -295,6 +415,7 @@ def integral_sinc_sq_times_exp (x: ℝ) : ℝ  := ∫ t in Ioi 0 , sinc_sq_times
 def integral_neg_sinc_sq_times_id_exp (x: ℝ) : ℝ  := ∫ t in Ioi 0 , neg_sinc_sq_times_id_exp t x
 
 def integral_sin_sq_times_exp(x: ℝ) : ℝ  := ∫ t in Ioi 0 , sin_sq_times_exp t x
+
 
 lemma hasDeriv_sinc_sq_times_exp(t : ℝ) (ht : 0 < t):
   ∀a: ℝ ,HasDerivAt (sinc_sq_times_exp t) (neg_sinc_sq_times_id_exp t a) a:= by
@@ -383,27 +504,6 @@ lemma neg_sinc_sq_times_id_exp_le_exp (t: ℝ):
       exact h_sin
     push_neg at h
     exact h_sin2.trans h.le
-
-lemma sin_sq_times_exp_le_exp(t: ℝ):
-   ∀ x, ‖sin_sq_times_exp t x‖ ≤ Real.exp (-x * t):= by
-  intro x
-  unfold sin_sq_times_exp
-  rw [norm_mul]
-  have:  ‖rexp (-x * t)‖= rexp (-x * t):= by
-    simp
-  rw[this]
-  apply mul_le_of_le_one_left
-  have h_exp_pos_le:  0 ≤ rexp (-(x * t)):= by
-    have h_exp_pos : 0 < Real.exp (-(x * t)) := Real.exp_pos (-(x * t))
-    simp[h_exp_pos.le]
-  have: rexp (-(x * t))= rexp (-x * t):= by
-    simp
-
-  rw[ this] at h_exp_pos_le
-
-  exact h_exp_pos_le
-  simp
-  simp[Real.abs_sin_le_one]
 
 theorem hasDeriv_integral_sinc_sq_times_exp (x : ℝ) (hx : 0 < x) :
     HasDerivAt (integral_sinc_sq_times_exp) (integral_neg_sinc_sq_times_id_exp x) x := by
@@ -1393,8 +1493,6 @@ lemma h_log_ineq_neg2 : ∀ y, -1<y → y <0 → Real.log (1 + y)/y ≤ 1/(1+y) 
   have h_div := (div_le_iff_of_neg'  (a:= 1/(1 + y)) (b:=Real.log (1 + y))  hy_lt).mpr h_rw
   exact h_div
 
-
-
 theorem integral_sinc_sq_times_exp_eq (x : ℝ) (hx : 0 < x) :
     integral_sinc_sq_times_exp x = x/4*Real.log (x^2/(4+x^2))+ Real.arctan (2/x) := by
     let G := fun t => t/4*Real.log (t^2/(4+t^2))+ Real.arctan (2/t)
@@ -1755,50 +1853,6 @@ theorem integral_sinc_sq_eq_pi_div_two :
 
 
 
-
-Real.tendsto_pow_mul_exp_neg_atTop_nhds_zero
-
-
-
-
-
-
-
-
-theorem integral_dirichlet_from_Feynman :
-    Tendsto integral_sin_div_times_exp (𝓝[>] 0) (𝓝 (π / 2)) := by
-  apply Tendsto.congr'
-  · filter_upwards [self_mem_nhdsWithin] with x hx
-    rw [integral_sin_div_times_exp_eq_arctan x hx]
-  · have h_atan : Tendsto arctan (𝓝[>] 0) (𝓝 0) := by
-      have h := continuous_arctan.tendsto 0
-      rw [arctan_zero] at h
-      exact h.mono_left nhdsWithin_le_nhds
-    have h_const : Tendsto (fun _ : ℝ ↦ π / 2) (𝓝[>] 0) (𝓝 (π / 2)) := tendsto_const_nhds
-    simpa using h_const.sub h_atan
-
-
-
-
-
-
-
-
-
-
-
-
-
-  have h1 :
-    ∫ t in a / 2..T / 2, Real.sin (2 * t) / t
-      =
-    ∫ t in a / 2..T / 2, sinc t ^ 2
-      -
-    (sinc (a / 2) ^ 2 * (a / 2)
-      - sinc (T / 2) ^ 2 * (T / 2)) :=
-      by exact eq_sub_of_add_eq' h_new
-
-
  lemma h_lim_sinc_int: Tendsto (fun p : ℝ × ℝ => ∫ t in p.1/(2:ℝ)..p.2/(2:ℝ), (Real.sinc t)^2)
     ((nhdsWithin 0 (Set.Ioi (0 : ℝ)))×ˢ(atTop : Filter ℝ)) (nhds (∫ t in Set.Ioi 0, (Real.sinc t)^2)) := by
     let FilterA := (nhdsWithin 0 (Set.Ioi (0 : ℝ)))
@@ -1863,6 +1917,9 @@ theorem integral_dirichlet_from_Feynman :
     have h_sub := hT.sub hA
     simp only [sub_zero] at h_sub
     exact h_sub
+
+lemma h_lim_sinc_int': Tendsto (fun p : ℝ × ℝ => ∫ t in p.1/(2:ℝ)..p.2/(2:ℝ), (Real.sinc t)^2)
+    ((nhdsWithin 0 (Set.Ioi (0 : ℝ)))×ˢ(atTop : Filter ℝ)) (nhds (π/2)):= by
 
   lemma h_lim_T: Tendsto (fun T ↦ (sinc (T / 2))^2 * (T / 2)) (atTop : Filter ℝ) (𝓝 0) := by
     let FilterT := (atTop : Filter ℝ)
