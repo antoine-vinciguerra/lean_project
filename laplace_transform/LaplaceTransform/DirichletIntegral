@@ -400,10 +400,6 @@ lemma integral_sinc_zero_T (T : ℝ)(hT: T>0) :
   exact tendsto_nhds_unique hf hf_lim_from_g
 
 
-
-
-
-
 def sinc_sq_times_exp (t : ℝ) : ℝ → ℝ := fun x ↦ Real.exp (-x * t) * (Real.sinc t)^2
 
 def neg_sinc_sq_times_id_exp (t : ℝ) : ℝ → ℝ := fun x ↦ -(Real.sinc t)^2  *t* Real.exp (-x * t)
@@ -1850,238 +1846,41 @@ theorem integral_sinc_sq_eq_pi_div_two :
       exact h_somme
   exact tendsto_nhds_unique h_lim_int h_lim_int2
 
-
-
-
- lemma h_lim_sinc_int: Tendsto (fun p : ℝ × ℝ => ∫ t in p.1/(2:ℝ)..p.2/(2:ℝ), (Real.sinc t)^2)
-    ((nhdsWithin 0 (Set.Ioi (0 : ℝ)))×ˢ(atTop : Filter ℝ)) (nhds (∫ t in Set.Ioi 0, (Real.sinc t)^2)) := by
-    let FilterA := (nhdsWithin 0 (Set.Ioi (0 : ℝ)))
-    let FilterT := (atTop : Filter ℝ)
-    let F := FilterA ×ˢ FilterT
-    have h_congr : (fun p : ℝ × ℝ => ∫ t in p.1/(2:ℝ)..p.2/(2:ℝ), (Real.sinc t)^2) =
-                 (fun p => (∫ t in 0..p.2/(2:ℝ), (Real.sinc t)^2) - (∫ t in 0..p.1/(2:ℝ), (Real.sinc t)^2)) := by
-      ext p
-      rw [←intervalIntegral.integral_interval_sub_left (a := 0)]
-      apply Continuous.intervalIntegrable
-      exact Real.continuous_sinc.pow 2
-      apply Continuous.intervalIntegrable
-      exact Real.continuous_sinc.pow 2
-    simp_rw [h_congr]
-    have hT : Tendsto (fun p : ℝ × ℝ => ∫ t in 0..p.2/(2:ℝ), (Real.sinc t)^2) F (𝓝 (∫ t in Ioi 0, (Real.sinc t)^2)) := by
-      apply intervalIntegral_tendsto_integral_Ioi 0
-      ·exact integrable_sinc_sq
-      · have: Tendsto (fun i ↦ i.2) F atTop := by
-          exact tendsto_snd
-        have h : Tendsto (fun i :ℝ× ℝ ↦ i.2 / 2) F atTop := by
-          let c : ℝ := 1/2
-          have hc : 0 < c := by
-            norm_num
-          have h_eq : (fun( T:ℝ× ℝ) ↦ T.2/ 2) = (fun T ↦ T.2 * c) := by
-            unfold c; ext; field_simp;
-
-          simp_rw[h_eq]
-          have h_t : Tendsto (fun x ↦ x * c) atTop atTop := tendsto_id.atTop_mul_const hc
-          exact h_t.comp this
-        exact h
-
-    have hA : Tendsto (fun p : ℝ × ℝ => ∫ t in 0..p.1/2, (Real.sinc t)^2) F (𝓝 0) := by
-      have h_int : ∀ (a b : ℝ), IntervalIntegrable (fun t↦(Real.sinc t)^2) volume a b := by
-        intro a b
-        apply Continuous.intervalIntegrable
-        exact Real.continuous_sinc.pow 2
-
-      have h_cont : Continuous (fun a => ∫ t in 0..a, (Real.sinc t)^2) :=
-        intervalIntegral.continuous_primitive h_int 0
-
-      have h_lim := h_cont.tendsto 0
-      let f := fun p:ℝ × ℝ ↦ p.1 / 2
-      have h_lim_p1 : Tendsto (fun p ↦ p.1) F (𝓝[>] 0) := tendsto_fst
-      have h_f : Tendsto (fun p ↦ p.1 / 2) F (𝓝 0) := by
-
-        let c : ℝ := 1/2
-        have hc : 0 < c := by norm_num
-        have h_eq : (fun( a:ℝ× ℝ) ↦ a.1 / 2) = (fun a ↦ a.1* c) := by
-          unfold c; ext; field_simp;
-        rw[h_eq]
-        have h_f_proj: Tendsto (fun a ↦ a * c) (𝓝[>] 0) (𝓝 0):= by
-          have: Tendsto (fun a ↦ a * c) (𝓝 0) (𝓝 (0 * c)) := by
-            exact tendsto_id.mul_const c
-          simp at this
-          exact this.mono_left nhdsWithin_le_nhds
-        exact h_f_proj.comp h_lim_p1
-      have h_final : Tendsto (fun p ↦ ∫ (t : ℝ) in 0..p.1 / 2, sinc t ^ 2) F (𝓝 (∫ (t : ℝ) in 0..0, sinc t ^ 2)) :=
-        h_lim.comp h_f
-      simp at h_final
-      exact h_final
-
-    have h_sub := hT.sub hA
-    simp only [sub_zero] at h_sub
-    exact h_sub
-
-lemma h_lim_sinc_int': Tendsto (fun p : ℝ × ℝ => ∫ t in p.1/(2:ℝ)..p.2/(2:ℝ), (Real.sinc t)^2)
-    ((nhdsWithin 0 (Set.Ioi (0 : ℝ)))×ˢ(atTop : Filter ℝ)) (nhds (π/2)):= by
-
-  lemma h_lim_T: Tendsto (fun T ↦ (sinc (T / 2))^2 * (T / 2)) (atTop : Filter ℝ) (𝓝 0) := by
-    let FilterT := (atTop : Filter ℝ)
-    let g := fun t ↦ (sinc t)^2 * t
-    let f:= fun (T:ℝ) ↦ T / 2
-    have h_comp : Tendsto (fun (T:ℝ) ↦ T / 2) FilterT FilterT := by
-      let c : ℝ := 1/2
-      have hc : 0 < c := by norm_num
-      have h_eq : (fun( T:ℝ) ↦ T / 2) = (fun T ↦ T * c) := by
-        unfold c; ext; field_simp;
-      rw[h_eq]
-      apply tendsto_id.atTop_mul_const hc
-    have: (fun a ↦ sinc (a / 2) ^ 2 * (a / 2)) = fun a ↦ (g∘ f) a:= by
-      unfold f g
-      simp
-    rw[this]
-    refine Tendsto.comp (y := atTop) ?_ h_comp
-    unfold g
-    exact limit_sinc_sq_mul_self_atTop
-
-  lemma h_lim_a: Tendsto (fun a ↦ (sinc (a / 2))^2 * (a / 2)) (nhdsWithin 0 (Set.Ioi (0 : ℝ))) (𝓝 0) := by
-    let g := fun x ↦ sinc x ^ 2 * x
-    let f := fun a:ℝ ↦ a / 2
-    have h_comp : Tendsto (fun (a:ℝ) ↦ a / 2) (nhdsWithin 0 (Set.Ioi (0 : ℝ))) (nhdsWithin 0 (Set.Ioi (0 : ℝ))) := by
-      let c : ℝ := 1/2
-      have hc : 0 < c := by norm_num
-      have h_eq : (fun( a:ℝ) ↦ a / 2) = (fun a ↦ a* c) := by
-        unfold c; ext; field_simp;
-      rw[h_eq]
-      rw[tendsto_nhdsWithin_iff]
-      constructor
-      · have h_std : Tendsto (fun a ↦ a * c) (𝓝 0) (𝓝 (0 * c)) := by
-          exact tendsto_id.mul_const c
-        simp at h_std
-        exact h_std.mono_left nhdsWithin_le_nhds
-      · filter_upwards [self_mem_nhdsWithin] with n hn
-        rw [Set.mem_Ioi] at hn
-        unfold c
-        simp
-        exact hn
-    have: (fun a ↦ sinc (a / 2) ^ 2 * (a / 2)) = fun a ↦ (g∘ f) a:= by
-      unfold f g
-      simp
-    rw[this]
-    apply Tendsto.comp
-    · exact limit_sinc_sq_mul_self_zero
-    · exact h_comp
-
-
-lemma limit_expression_sinc_sq :
-  Tendsto (fun (p : ℝ × ℝ) => (∫ t in (p.1/2)..(p.2/2), (Real.sinc t)^2) - (Real.sinc (p.1/2))^2 * (p.1/2) + (Real.sinc (p.2/2))^2 * (p.2/2))
-  (nhdsWithin 0 (Set.Ioi 0) ×ˢ atTop) (nhds (∫ t in Set.Ioi 0, (Real.sinc t)^2)) := by
-  let FilterA := (nhdsWithin 0 (Set.Ioi (0 : ℝ)))
+lemma h_lim_T: Tendsto (fun T ↦ (sinc (T / 2))^2 * (T / 2)) (atTop : Filter ℝ) (𝓝 0) := by
   let FilterT := (atTop : Filter ℝ)
-  let F := FilterA ×ˢ FilterT
+  let g := fun t ↦ (sinc t)^2 * t
+  let f:= fun (T:ℝ) ↦ T / 2
+  have h_comp : Tendsto (fun (T:ℝ) ↦ T / 2) FilterT FilterT := by
+    let c : ℝ := 1/2
+    have hc : 0 < c := by norm_num
+    have h_eq : (fun( T:ℝ) ↦ T / 2) = (fun T ↦ T * c) := by
+      unfold c; ext; field_simp;
+    rw[h_eq]
+    apply tendsto_id.atTop_mul_const hc
+  have: (fun a ↦ sinc (a / 2) ^ 2 * (a / 2)) = fun a ↦ (g∘ f) a:= by
+    unfold f g
+    simp
+  rw[this]
+  refine Tendsto.comp (y := atTop) ?_ h_comp
+  unfold g
+  exact limit_sinc_sq_mul_self_atTop
 
-  have h_lim_1: Tendsto (fun p : ℝ × ℝ => ∫ t in p.1/2..p.2/2, (Real.sinc t)^2)
-    ((nhdsWithin 0 (Set.Ioi (0 : ℝ)))×ˢ(atTop : Filter ℝ)) (nhds (∫ t in Set.Ioi 0, (Real.sinc t)^2)):= h_lim_sinc_int
-  have h_lim_2 : Tendsto (fun p ↦ sinc (p.1 / 2) ^ 2 * (p.1 / 2)) F (𝓝 0) :=
-    h_lim_a.comp tendsto_fst
-  have h_lim_3 : Tendsto (fun p ↦ sinc (p.2 / 2) ^ 2 * (p.2 / 2)) F (𝓝 0) :=
-    h_lim_T.comp tendsto_snd
-  have h_sub := h_lim_1.sub h_lim_2
-  have h_final := h_sub.add h_lim_3
-  simp at *
-  exact h_final
 
-
-
-
-
-
-
-theorem integral_sinc_sq_eq_integral_sinc :
-    ∫ t in Set.Ioi 0, (Real.sinc t)^2 = ∫ t in Set.Ioi 0, Real.sinc t := by
-  let I := ∫ t in Set.Ioi 0, (Real.sinc t)^2
-  let J := ∫ t in Set.Ioi 0, Real.sinc t
-  let FiltreA := (nhdsWithin 0 (Set.Ioi (0 : ℝ)))
-  let FilterT := (atTop : Filter ℝ)
-  let FilterProduct := FiltreA ×ˢ FilterT
-
-  have h_lim_f : Tendsto (fun p : ℝ × ℝ => ∫ t in p.1..p.2, (Real.sinc t)^2)
-    FilterProduct (nhds (∫ t in Set.Ioi 0, (Real.sinc t)^2)) := by
-    have h_congr : (fun p : ℝ × ℝ => ∫ t in p.1..p.2, (Real.sinc t)^2) =
-                 (fun p => (∫ t in 0..p.2, (Real.sinc t)^2) - (∫ t in 0..p.1, (Real.sinc t)^2)) := by
-      ext p
-      rw [←intervalIntegral.integral_interval_sub_left (a := 0)]
-      apply Continuous.intervalIntegrable
-      exact Real.continuous_sinc.pow 2
-      apply Continuous.intervalIntegrable
-      exact Real.continuous_sinc.pow 2
-    simp_rw [h_congr]
-    have hT : Tendsto (fun p : ℝ × ℝ => ∫ t in 0..p.2, (Real.sinc t)^2) FilterProduct (𝓝 (∫ t in Ioi 0, (Real.sinc t)^2)) := by
-      apply intervalIntegral_tendsto_integral_Ioi 0
-      ·exact integrable_sinc_sq
-      · exact tendsto_snd
-    have hA : Tendsto (fun p : ℝ × ℝ => ∫ t in 0..p.1, (Real.sinc t)^2) FilterProduct (𝓝 0) := by
-      have h_int : ∀ (a b : ℝ), IntervalIntegrable (fun t↦(Real.sinc t)^2) volume a b := by
-        intro a b
-        apply Continuous.intervalIntegrable
-        exact Real.continuous_sinc.pow 2
-
-      have h_cont : Continuous (fun a => ∫ t in 0..a, (Real.sinc t)^2) :=
-        intervalIntegral.continuous_primitive h_int 0
-
-      have h_lim := h_cont.tendsto 0
-      simp only [intervalIntegral.integral_same] at h_lim
-      exact h_lim.comp (tendsto_fst.mono_left (Filter.prod_mono nhdsWithin_le_nhds le_rfl))
-
-    have h_sub := hT.sub hA
-    simp only [sub_zero] at h_sub
-    exact h_sub
-
-  have h_lim_g : Tendsto (fun p : ℝ × ℝ => ∫ t in p.1..p.2, Real.sinc t) FilterProduct (𝓝 J) := by
-    have h_congr : (fun p : ℝ × ℝ => ∫ t in p.1..p.2, Real.sinc t) =
-                 (fun p => (∫ t in 0..p.2, Real.sinc t) - (∫ t in 0..p.1, Real.sinc t)) := by
-      ext p
-      rw [←intervalIntegral.integral_interval_sub_left (a := 0)]
-      apply Continuous.intervalIntegrable
-      exact Real.continuous_sinc
-      apply Continuous.intervalIntegrable
-      exact Real.continuous_sinc
-    rw[h_congr]
-    have h_lim_top : Tendsto (fun p ↦ ∫ t in 0..p.2, sinc t) FilterProduct (𝓝 J) := by
-      exact h_integrale_sinc_to_atTop.comp tendsto_snd
-  have h_lim_int : Tendsto (fun p : ℝ × ℝ => ∫ t in (2 * p.1)..(2 * p.2), Real.sinc t) FilterProduct (𝓝 J) := by
-    let map2 : ℝ × ℝ → ℝ × ℝ := fun p => (2 * p.1, 2 * p.2)
-
-    have h_map : Tendsto map2 FilterProduct FilterProduct := by
-      have h_prod_map : (fun p : ℝ × ℝ => (2 * p.1, 2 * p.2)) = Prod.map (fun x => 2 * x) (fun x => 2 * x) := by
-        ext p
-        simp [Prod.map]
-        simp
-      unfold map2
-      rw [h_prod_map]
-      apply Filter.Tendsto.prodMap
-      · have hAnew : Tendsto (fun x ↦ 2 * x) FiltreA FiltreA := by
-          have h_lim : Tendsto (fun x ↦ 2 * x) FiltreA (𝓝 0) := by
-            rw [(by ring : (0 : ℝ) = 2 * 0)]
-            exact (tendsto_id.const_mul 2).mono_left nhdsWithin_le_nhds
-          have h_pos : ∀ᶠ x in FiltreA, 2 * x ∈ Set.Ioi 0 := by
-            filter_upwards [self_mem_nhdsWithin] with x hx
-            simp at hx
-            simp
-            exact hx
-
-          rw [tendsto_nhdsWithin_iff]
-          constructor
-          ·  exact h_lim
-          ·  exact h_pos
-        exact hAnew
-      · have hTnew : Tendsto (fun x ↦ 2 * x) FilterT FilterT := by
-          rw [tendsto_atTop_atTop]
-          intro b
-          use max 0 b
-          intro a ha
-          have ha_pos : 0 ≤ a := (le_max_left 0 b).trans ha
-          have ha_b : b ≤ a := (le_max_right 0 b).trans ha
-          calc
-          b ≤ a := ha_b
-          _ ≤ a + a := le_add_of_nonneg_left ha_pos
-          _ = 2 * a := by ring
-        exact hTnew
-
-    exact hg.comp h_map
+theorem integral_dirichlet :
+    Tendsto (fun T: ℝ ↦(∫ t in 0..T, Real.sinc t))  (atTop : Filter ℝ) (𝓝 (π/2)):= by
+  have h_eq : ∀ᶠ T in atTop, (∫ t in 0..T, Real.sinc t) =
+      (∫ t in 0..T/2, (Real.sinc t)^2) + (Real.sinc (T/2))^2 * (T/2) := by
+    filter_upwards [eventually_gt_atTop 0] with T hT
+    exact integral_sinc_zero_T T hT
+  rw [tendsto_congr' h_eq]
+  have: 𝓝 (π / 2)= (𝓝 (π / 2+0)):= by simp
+  rw[this]
+  apply Tendsto.add
+  · have h_comp : Tendsto (fun T:ℝ ↦ T / 2) atTop atTop := by
+      simp_rw[div_eq_mul_inv]
+      apply tendsto_id.atTop_mul_const
+      linarith
+    have h_int_lim : Tendsto (fun x ↦ ∫ t in 0..x/2, (sinc t)^2) atTop (𝓝 (∫ t in Ioi 0, (sinc t)^2)) := MeasureTheory.intervalIntegral_tendsto_integral_Ioi 0 integrable_sinc_sq h_comp
+    rw[integral_sinc_sq_eq_pi_div_two] at h_int_lim
+    exact h_int_lim
+  · exact h_lim_T
