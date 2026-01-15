@@ -53,13 +53,10 @@ open MeasureTheory Complex Real Topology Filter
 open scoped Topology
 open Complex
 
-noncomputable def DirichletSin : ℝ → ℝ :=
-  fun x↦1/2 + 1/π * ∫ t in  (0).. (x), sinc t
+
 
 def Dirichlet_Val : ℝ := lim (atTop.map (fun T ↦ ∫ t in (0)..T, sinc t))
 
-noncomputable def HeavisidePerso (x : ℝ) : ℝ :=
-  if x > 0 then 1 else if x = 0 then 1/2 else 0
 
 
 lemma integrable_sinc_sq : IntegrableOn (fun (t:ℝ) => (sinc t)^2) (Ioi 0) := by
@@ -1884,3 +1881,78 @@ theorem integral_dirichlet :
     rw[integral_sinc_sq_eq_pi_div_two] at h_int_lim
     exact h_int_lim
   · exact h_lim_T
+
+noncomputable def DirichletSin : ℝ → ℝ :=
+  fun x↦1/2 + 1/π * ∫ t in  (0).. (x), sinc t
+
+noncomputable def HeavisidePerso (x : ℝ) : ℝ :=
+  if x > 0 then 1 else if x = 0 then 1/2 else 0
+
+theorem lim_S_Rx (x : ℝ) : Tendsto (fun R : ℝ ↦   DirichletSin (R * x)) atTop (𝓝 (HeavisidePerso x)) := by
+  unfold DirichletSin HeavisidePerso
+  split_ifs with hx hx0
+  · -- Case x > 0
+    have h_limit : Tendsto (fun R : ℝ ↦ R * x) atTop atTop :=
+      tendsto_id.atTop_mul_const hx
+
+    have h_int : Tendsto (fun R : ℝ ↦ ∫ t in (0)..(R * x), Real.sinc t) atTop (𝓝 (π/2)) :=
+      integral_dirichlet.comp h_limit
+    have : Tendsto (fun R : ℝ ↦ 1/2 + 1/π * ∫ t in (0)..(R * x), Real.sinc t) atTop (𝓝 (1/2 + 1/π * (π/2))) := by
+      apply tendsto_const_nhds.add
+      apply tendsto_const_nhds.mul h_int
+    have h_simp: (𝓝 (1 / 2 + 1 / π * (π / 2)))= 𝓝 (1:ℝ):= by
+      field_simp
+      simp
+    rw[h_simp] at this
+    exact this
+
+  · -- Case x = 0
+    simp [hx0]
+
+  · -- Case x < 0
+    -- Here R * x → -∞.The integral from 0 to -∞ is the opposite of  The integral from 0 to +∞ is
+    have hx_neg : x < 0 := by
+      simp at hx
+      simp at hx0
+      exact lt_of_le_of_ne hx hx0
+
+    have h_limit : Tendsto (fun R : ℝ ↦ R * x) atTop atBot :=
+      tendsto_id.atTop_mul_const_of_neg hx_neg
+
+
+    have h_int_antisym : ∀ T, ∫ t in (0)..T, Real.sinc t = - ∫ t in (0)..(-T), Real.sinc t := by
+      have h_int_sinc_sym: ∀ T, ∫ t in (0)..T, Real.sinc t=  ∫ t in (0)..T, Real.sinc (-t):= by
+        intro T
+        congr
+        funext t
+        simp[Real.sinc_neg]
+
+      intro T
+      rw[h_int_sinc_sym]
+      rw [intervalIntegral.integral_comp_neg (fun t ↦ Real.sinc t)]
+      simp
+      rw [intervalIntegral.integral_symm]
+
+    have h_dirichletBot: Tendsto (fun T ↦ ∫ t in 0..T, Real.sinc t) atBot (𝓝 (-π/2)) := by
+
+      have h := integral_dirichlet.comp tendsto_neg_atBot_atTop
+      simp only [Function.comp_def] at h
+      have h_final := h.neg
+      simp only [← h_int_antisym] at h_final
+      have: 𝓝 (-(π / 2))= 𝓝 (-π / 2):= by field_simp
+      rw[this] at h_final
+      exact h_final
+
+
+    have h_integral_limit : Tendsto (fun R ↦ ∫ t in 0..R * x, Real.sinc t) atTop (𝓝 (-π / 2)) :=
+  h_dirichletBot.comp h_limit
+    have: (𝓝 (0:ℝ))= 𝓝 ((1/2:ℝ)- (1/2:ℝ)) := by simp
+    rw[this]
+    apply Tendsto.add
+    apply tendsto_const_nhds
+
+    have: (𝓝 (-(1 / 2) :ℝ))= 𝓝 ((1/π :ℝ)*(-π/2:ℝ)) := by field_simp
+    rw[this]
+    apply Tendsto.mul
+    apply tendsto_const_nhds
+    exact h_integral_limit

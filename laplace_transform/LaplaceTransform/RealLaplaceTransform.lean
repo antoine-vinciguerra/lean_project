@@ -206,7 +206,7 @@ section LaplaceInverse
 -- First we need to define what will be in the integrand
 --the integral sum is defined over the sum of two reals
 noncomputable def DirichletSin : ℝ → ℝ :=
-  fun x↦1/2 + 1/π * ∫ t in  (0).. (x), sinc t
+  fun x↦ ∫ t in  (0).. (x), sinc t
 
 noncomputable def HeavisidePerso (x : ℝ) : ℝ :=
   if x > 0 then 1 else if x = 0 then 1/2 else 0
@@ -509,7 +509,6 @@ lemma integrand_simplification (t γ T : ℝ) (f: ℝ → ℂ) :
     congr
     ext a
     have h_const : 1 / (2 * I * ↑π) * (2 * I) = 1 / ↑π := by
-      -- On fait le calcul sur une petite expression, c'est très rapide
       field_simp [I_ne_zero, Real.pi_ne_zero]
     rw[h_const]
   _=∫ (a : ℝ), f a * cexp (-(↑a - ↑↑t) * ↑γ) *  ↑(Real.sin (T * (↑t - a))) / (↑π*(↑↑t - ↑a))   ∂μ_real:= by
@@ -687,7 +686,6 @@ theorem IsInverseLaplaceBounded  (f: ℝ → ℂ)(γ T: ℝ)(S: Set ℝ)
     apply Measurable.aestronglyMeasurable
     exact hg_meas
 
-  -- Utilisation du lemme extrait
   rw [Fubini_lemma hMeasurable h_int hg_Int]
 
   have hOutIntegral: ∀a : ℝ,
@@ -805,6 +803,15 @@ theorem IsInverseLaplaceBounded  (f: ℝ → ℂ)(γ T: ℝ)(S: Set ℝ)
 
   rw[integrand_simplification t γ T f ]
 
+theorem IsInverseLaplaceBounded' (f : ℝ → ℂ) (γ T : ℝ) (s : ℝ)
+  (h_cont : Continuous f)
+  (h_diff : Differentiable ℝ f)
+  (h_int : Integrable (fun t ↦ f t * cexp (-γ * t)))
+  (h_diff_int : Integrable (fun t ↦ (deriv f t) * cexp (-γ * t))) :
+  ∫ t in Set.Ici 0, f t * cexp (-(t - s) * γ) * (Real.sin (T * (t - s)) / (π * (t - s))) =
+  - f 0 * cexp (s * γ) * (DirichletSin (-T * s) / π) -
+  ∫ t in Set.Ici 0, deriv (fun u ↦ f u * cexp (-(u - s) * γ)) t * (DirichletSin (T * (t - s)) / π) :=
+sorry
 
 end LaplaceInverse
 section LaplaceTable
