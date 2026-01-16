@@ -55,8 +55,6 @@ open Complex
 
 
 
-def Dirichlet_Val : ℝ := lim (atTop.map (fun T ↦ ∫ t in (0)..T, sinc t))
-
 
 
 lemma integrable_sinc_sq : IntegrableOn (fun (t:ℝ) => (sinc t)^2) (Ioi 0) := by
@@ -497,6 +495,27 @@ lemma neg_sinc_sq_times_id_exp_le_exp (t: ℝ):
       exact h_sin
     push_neg at h
     exact h_sin2.trans h.le
+
+lemma sin_sq_times_exp_le_exp(t: ℝ):
+   ∀ x, ‖sin_sq_times_exp t x‖ ≤ Real.exp (-x * t):= by
+  intro x
+  unfold sin_sq_times_exp
+  rw [norm_mul]
+  have:  ‖rexp (-x * t)‖= rexp (-x * t):= by
+    simp
+  rw[this]
+  apply mul_le_of_le_one_left
+  have h_exp_pos_le:  0 ≤ rexp (-(x * t)):= by
+    have h_exp_pos : 0 < Real.exp (-(x * t)) := Real.exp_pos (-(x * t))
+    simp[h_exp_pos.le]
+  have: rexp (-(x * t))= rexp (-x * t):= by
+    simp
+
+  rw[ this] at h_exp_pos_le
+
+  exact h_exp_pos_le
+  simp
+  simp[Real.abs_sin_le_one]
 
 theorem hasDeriv_integral_sinc_sq_times_exp (x : ℝ) (hx : 0 < x) :
     HasDerivAt (integral_sinc_sq_times_exp) (integral_neg_sinc_sq_times_id_exp x) x := by
