@@ -870,7 +870,7 @@ lemma DirichletSinDerivAt(T : ℝ)(S: Set ℝ) (t:S) :  ∀ a, deriv (fun a : �
     rw [← Real.sinc_neg]
     ring_nf
 
-lemma CExpDerivAt(f: ℝ → ℂ) (T γ: ℝ) (S: Set ℝ) (t:S) (h_diff : Differentiable ℝ f) : ∀ a, HasDerivAt (fun a : ℝ ↦ f a * cexp (-(a - t) * γ)) (deriv f a * cexp (-(a - t) * γ) - f a * γ * cexp (-(a - t) * γ)) a := by
+lemma CExpDerivAt(f: ℝ → ℂ) (γ: ℝ) (S: Set ℝ) (t:S) (h_diff : Differentiable ℝ f) : ∀ a, HasDerivAt (fun a : ℝ ↦ f a * cexp (-(a - t) * γ)) (deriv f a * cexp (-(a - t) * γ) - f a * γ * cexp (-(a - t) * γ)) a := by
   intro a
   let u' := deriv f a
   let v := cexp (-(a - t) * γ)
@@ -905,7 +905,7 @@ lemma h_lim_CexpTop (f : ℝ → ℂ) (γ T : ℝ)(S: Set ℝ)(t:S)
 
   apply MeasureTheory.tendsto_zero_of_hasDerivAt_of_integrableOn_Ioi (a := 0)
   · intro x hx
-    have h:= CExpDerivAt f T γ S t h_diff x
+    have h:= CExpDerivAt f γ S t h_diff x
     convert h using 1
     funext a
     have:  f a * cexp (-(↑a * ↑γ)) * cexp (↑↑t * ↑γ)=  f a *cexp (-(↑a * ↑γ)+↑↑t * ↑γ):= by
@@ -980,7 +980,7 @@ lemma h_lim_CexpBot (f : ℝ → ℂ) (γ T : ℝ)(S: Set ℝ)(t:S)
 
   apply MeasureTheory.tendsto_zero_of_hasDerivAt_of_integrableOn_Iic (a := 0)
   · intro x hx
-    have h:= CExpDerivAt f T γ S t h_diff x
+    have h:= CExpDerivAt f γ S t h_diff x
     convert h using 1
     funext a
     have:  f a * cexp (-(↑a * ↑γ)) * cexp (↑↑t * ↑γ)=  f a *cexp (-(↑a * ↑γ)+↑↑t * ↑γ):= by
@@ -1040,28 +1040,6 @@ lemma h_lim_CexpBot (f : ℝ → ℂ) (γ T : ℝ)(S: Set ℝ)(t:S)
     have h_int_new2 := h_int.integrableOn (s := Set.Iic 0)
     rw [IntegrableOn] at h_int_new2
     exact h_int_new2
-lemma DirichletSin_continuous_comp (T:ℝ)(S: Set ℝ)(t:ℝ):Continuous fun x ↦ (DirichletSin (T * (x - t))):= by
-  unfold DirichletSin
-  push_cast
-  apply Continuous.add
-  · continuity
-  · apply Continuous.mul
-    · continuity
-    · have : Continuous (fun x ↦ (∫ (t : ℝ) in 0..T * (x - ↑t), sinc t)):= by
-        let F := fun (u : ℝ) ↦ ∫ (s : ℝ) in (0)..u, sinc s
-        let g := fun (x : ℝ) ↦ T * (x - t)
-        change Continuous (F ∘ g)
-        apply Continuous.comp
-        apply intervalIntegral.continuous_primitive
-        apply Continuous.intervalIntegrable
-        exact continuous_sinc
-        unfold g
-        apply Continuous.mul
-        apply continuous_const
-        apply Continuous.sub
-        apply continuous_id
-        apply continuous_const
-      exact this
 
 theorem IsInverseLaplaceBounded' (f : ℝ → ℂ) (γ T : ℝ)(S: Set ℝ)
   (h_cont : Continuous f)
@@ -1069,15 +1047,15 @@ theorem IsInverseLaplaceBounded' (f : ℝ → ℂ) (γ T : ℝ)(S: Set ℝ)
   (h_int : Integrable (fun t ↦ f t * cexp (-γ * t)))
   (h_diff_int : Integrable (fun t ↦ (deriv f t) * cexp (-γ * t)))
   (hT : 0 ≤ T) :
-  ∀(t:S), ∫ (a : ℝ), f a * cexp (-(↑a - ↑↑t) * ↑γ) *  T* ↑(Real.sinc (T * (↑t - a))) / (↑π)  =
-  -∫ (a : ℝ), deriv (fun u ↦ f u * cexp (-(u - t) * γ)) a * DirichletSin (T * (a - t))  := by
+  ∀(t:S), ∫ (a : ℝ), f a * cexp (-(↑a - ↑↑t) * ↑γ) *  T* ↑(Real.sinc (T * (↑t - a))) / (↑π) ∂μ_real =
+    -f 0 * cexp (↑↑t * ↑γ) * ↑(DirichletSin (-T * ↑t)) -∫ (a : ℝ), deriv (fun u ↦ f u * cexp (-(u - t) * γ)) a * DirichletSin (T * (a - t)) ∂μ_real  := by
   intro t
   let u := fun a : ℝ ↦ f a * cexp (-(a - t) * γ)
   let v := fun a : ℝ ↦ DirichletSin (T * (a - t))
   have h_deriv_v : ∀ a, deriv v a =  T* (Real.sinc (T * (t - a))) / π  := by
     exact DirichletSinDerivAt T S t
   have h_has_deriv_u : ∀ a, HasDerivAt u (deriv f a * cexp (-(a - t) * γ) - f a * γ * cexp (-(a - t) * γ)) a := by
-    exact CExpDerivAt f T γ S t h_diff
+    exact CExpDerivAt f γ S t h_diff
 
   let t_real : ℝ := ↑↑t
   have h_deriv_u_eq : ∀ a, deriv u a = deriv f a * cexp (-(a - t_real) * γ) - f a * γ * cexp (-(a - t_real) * γ) := by
@@ -1090,152 +1068,8 @@ theorem IsInverseLaplaceBounded' (f : ℝ → ℂ) (γ T : ℝ)(S: Set ℝ)
   have h_lim_u_Bot : Tendsto u atBot (𝓝 0) := by
     exact h_lim_CexpBot f γ T S t h_diff h_int h_diff_int
 
+  have h_v_real_bdd : ∃ C, ∀ x, |v x| ≤ C :=  DirichletSinBoundedComp T t hT
 
-
-  have h_v_real_bdd : ∃ C, ∀ x, |v x| ≤ C := by
-    by_cases hT_z: T=0
-    · unfold v
-      unfold DirichletSin
-      simp[hT_z]
-      use (1:ℝ)
-      linarith
-    · have h_cont_v : Continuous v := by
-        unfold v
-        have:= DirichletSin_continuous_comp T S t
-        exact this
-
-      have h_lim_top : Tendsto v atTop (𝓝 1) := by
-        unfold v
-        have h_limit : Tendsto (fun R : ℝ ↦ T * (R - ↑t)) atTop atTop := by
-          have h_rw : (fun R : ℝ ↦ T * (R - ↑t))= (fun R : ℝ ↦T*R -T*↑t):= by
-            funext R
-            ring_nf
-          rw[h_rw]
-          apply tendsto_atTop_add_const_right (f:= fun R : ℝ ↦ T * R )
-          have:  (fun R ↦ T * R) =  (fun R ↦ R * T) := by
-            funext R
-            ring_nf
-          rw[this]
-          apply Tendsto.atTop_mul_const
-          have: 0≠ T := by
-            push_neg at hT_z
-            exact hT_z.symm
-          exact lt_of_le_of_ne hT this
-          exact tendsto_id
-
-        have h_int_dir:=integral_dirichlet.comp h_limit
-        unfold DirichletSin
-        have: (𝓝 1)=𝓝 (1/2 + 1/π * (π/2)):= by
-          field_simp
-          ring_nf
-        rw[this]
-        apply tendsto_const_nhds.add
-        apply tendsto_const_nhds.mul
-        exact h_int_dir
-
-      have h_lim_bot : Tendsto v atBot (𝓝 (0)) := by
-        unfold v
-        unfold DirichletSin
-
-        have h_limit : Tendsto (fun R : ℝ ↦ T * (R - ↑t)) atBot atBot := by
-          have h_rw : (fun R : ℝ ↦ T * (R - ↑t))= (fun R : ℝ ↦T*R -T*↑t):= by
-            funext R
-            ring_nf
-          rw[h_rw]
-          apply tendsto_atBot_add_const_right (f:= fun R : ℝ ↦ T * R )
-          have:  (fun R ↦ T * R) =  (fun R ↦ R * T) := by
-            funext R
-            ring_nf
-          rw[this]
-          apply Tendsto.atBot_mul_const
-          have: 0≠ T := by
-            push_neg at hT_z
-            exact hT_z.symm
-          exact lt_of_le_of_ne hT this
-          exact tendsto_id
-        have h_int_antisym : ∀ T, ∫ t in (0)..T, Real.sinc t = - ∫ t in (0)..(-T), Real.sinc t := by
-          have h_int_sinc_sym: ∀ T, ∫ t in (0)..T, Real.sinc t=  ∫ t in (0)..T, Real.sinc (-t):= by
-            intro T
-            congr
-            funext t
-            simp[Real.sinc_neg]
-          intro T
-          rw[h_int_sinc_sym]
-          rw [intervalIntegral.integral_comp_neg (fun t ↦ Real.sinc t)]
-          simp
-          rw [intervalIntegral.integral_symm]
-
-        have h_dirichletBot: Tendsto (fun T ↦ ∫ t in 0..T, Real.sinc t) atBot (𝓝 (-π/2)) := by
-          have h := integral_dirichlet.comp tendsto_neg_atBot_atTop
-          simp only [Function.comp_def] at h
-          have h_final := h.neg
-          simp only [← h_int_antisym] at h_final
-          have: 𝓝 (-(π / 2))= 𝓝 (-π / 2):= by field_simp
-          rw[this] at h_final
-          exact h_final
-        have h_integral_limit : Tendsto (fun R ↦ ∫ t in 0..T * (R - ↑t), Real.sinc t) atBot (𝓝 (-π / 2)) :=
-          h_dirichletBot.comp h_limit
-        have: (𝓝 (0:ℝ))= 𝓝 ((1/2:ℝ)- (1/2:ℝ)) := by simp
-        rw[this]
-        apply Tendsto.add
-        apply tendsto_const_nhds
-
-        have: (𝓝 (-(1 / 2) :ℝ))= 𝓝 ((1/π :ℝ)*(-π/2:ℝ)) := by field_simp
-        rw[this]
-        apply Tendsto.mul
-        apply tendsto_const_nhds
-        exact h_integral_limit
-      have h_norm_lim := h_lim_bot.norm
-      have: (𝓝 ‖(0:ℝ)‖)= (𝓝 0):= by simp
-      rw[this] at h_norm_lim
-      rw [Metric.tendsto_atTop] at h_lim_top
-      obtain ⟨R_top, hR_top⟩ := h_lim_top 1 zero_lt_one
-      have h_v_lt : ∀ᶠ (x : ℝ) in atBot, ‖v x‖ < 1 :=
-  Filter.Tendsto.eventually_lt_const zero_lt_one h_norm_lim
-      obtain ⟨R_bot, hR_bot_forall⟩ := Filter.mem_atBot_sets.1 h_v_lt
-      let a := min R_bot R_top
-      let b := max R_bot R_top
-      have h_subset : Set.Icc a b ⊆ Set.Icc a b := rfl.subset
-      have h_cont_on : ContinuousOn v (Set.Icc a b) := h_cont_v.continuousOn
-      have h_img_compact : IsCompact (v '' Set.Icc a b) := isCompact_Icc.image h_cont_v
-      have h_img_bdd : Bornology.IsBounded (v '' Set.Icc a b) :=
-  h_img_compact.isBounded
-      obtain ⟨M, hM_pos, hM⟩ := Bornology.IsBounded.exists_pos_norm_le h_img_bdd
-      use max M 2
-      intro x
-      rw [← Real.norm_eq_abs]
-      rcases lt_trichotomy x a with (hx_lt_a | hx_mid_or_right)
-      · have hx_bot : x ≤ R_bot := le_trans (le_of_lt hx_lt_a) (min_le_left _ _)
-        have h_mem := hR_bot_forall x hx_bot
-        have h_lt : ‖v x‖ < 1 := h_mem
-        apply le_trans _ (le_max_right M 2)
-        apply le_trans (le_of_lt h_lt)
-        linarith
-      · by_cases hxb : x∈ Icc a b
-        · have h_vx_mem : v x ∈ v '' Icc a b := mem_image_of_mem v hxb
-          have h_le_M : ‖v x‖ ≤ M := hM (v x) h_vx_mem
-          exact h_le_M.trans (le_max_left M 2)
-        · have hax : a ≤ x := hx_mid_or_right.elim (fun h => h.symm.le) (fun h => h.le)
-          have h_x_gt_b : x > b := by
-            rw [mem_Icc, not_and_or] at hxb
-            cases hxb with
-              | inl h_lt_a => exact (h_lt_a hax).elim
-              | inr h_gt_b => exact not_le.mp h_gt_b
-          have h_x_gt_Rtop : x > R_top :=by
-            have h_b_ge : b ≥ R_top := le_max_right R_bot R_top
-            linarith
-          have h_dist : dist (v x) 1 < 1 := hR_top x (le_of_lt h_x_gt_Rtop)
-          rw [dist_eq_norm] at h_dist
-          have h_norm_2 : ‖v x‖ < 2 := by
-            calc ‖v x‖ = ‖(v x - 1) + 1‖ := by ring_nf
-              _ ≤ ‖v x - 1‖ + ‖(1 : ℝ)‖ := norm_add_le _ _
-              _ < 1 + 1 := by
-                simp
-                rw[←Real.norm_eq_abs]
-                exact h_dist
-              _ = 2 := by ring_nf
-          apply le_trans _ (le_max_right M 2)
-          exact le_of_lt h_norm_2
   obtain ⟨C, hC⟩ := h_v_real_bdd
   let vC := fun a ↦ (v a : ℂ)
   have h_v_bdd_top : IsBoundedUnder (· ≤ ·) atTop (norm ∘ vC) := by
@@ -1255,8 +1089,8 @@ theorem IsInverseLaplaceBounded' (f : ℝ → ℂ) (γ T : ℝ)(S: Set ℝ)
   have h_uv_bot : Tendsto (fun a ↦ u a * (v a : ℂ)) atBot (𝓝 0) :=
   NormedField.tendsto_zero_smul_of_tendsto_zero_of_bounded h_lim_u_Bot h_v_bdd_bot
 
-  have h_prep : ∫ (a : ℝ), f a * cexp (-(↑a - ↑↑t) * ↑γ) * ↑T * ↑(sinc (T * (↑t - a))) / ↑π =
-              ∫ (a : ℝ), u a * ↑(deriv v a) := by
+  have h_prep : ∫ (a : ℝ), f a * cexp (-(↑a - ↑↑t) * ↑γ) * ↑T * ↑(sinc (T * (↑t - a))) / ↑π ∂μ_real=
+              ∫ (a : ℝ), u a * ↑(deriv v a) ∂μ_real:= by
     congr
     funext a
     unfold u
@@ -1286,17 +1120,8 @@ theorem IsInverseLaplaceBounded' (f : ℝ → ℂ) (γ T : ℝ)(S: Set ℝ)
         rw[this]
         apply Integrable.mul_const
         exact h_diff_int
-      apply MeasureTheory.Integrable.mul_bdd
-      · exact h_int_shifted
-      · apply Continuous.aestronglyMeasurable
-        unfold v
-        have := DirichletSin_continuous_comp T S t
-        exact continuous_ofReal.comp this
-      · apply ae_of_all
-        intro a
-        rw [Complex.norm_real]
-        rw [Real.norm_eq_abs]
-        exact hC a
+      unfold v
+      exact Integrable_DirichletSin_times_integrableFunction' (fun a ↦ (deriv f a * cexp (-(↑a - ↑t_real) * ↑γ))) T t hT h_int_shifted
     · have h_int_f_shifted : Integrable (fun a ↦ (f a * ↑γ * cexp (-(↑a - ↑t_real) * ↑γ))) := by
         have:(fun a ↦ (f a * ↑γ* cexp (-(↑a - ↑t_real) * ↑γ))) = fun x ↦ ↑γ*f x * cexp (- ↑γ* ↑x) * cexp (↑t_real * ↑γ) := by
           funext x
@@ -1324,11 +1149,12 @@ theorem IsInverseLaplaceBounded' (f : ℝ → ℂ) (γ T : ℝ)(S: Set ℝ)
         rw[this]
         apply Integrable.const_mul (f:= fun x ↦ f x * cexp (-↑γ * ↑x)) (c:=↑γ)
         exact h_int
+
       apply MeasureTheory.Integrable.mul_bdd
       · exact h_int_f_shifted
       · apply Continuous.aestronglyMeasurable
         unfold v
-        have := DirichletSin_continuous_comp T S t
+        have := DirichletSin_continuous_comp T t
         exact continuous_ofReal.comp this
       · apply ae_of_all
         intro a
@@ -1412,21 +1238,339 @@ theorem IsInverseLaplaceBounded' (f : ℝ → ℂ) (γ T : ℝ)(S: Set ℝ)
     intro a
     apply HasDerivAt.ofReal_comp
     exact h_v_deriv_eq a
+  have h_IPP_Ici : ∫ (a : ℝ) in Ioi 0, u a * ↑(deriv v a) ∂volume =
+  0 - (u 0 * ↑(v 0)) - ∫ (a : ℝ) in Ioi 0, deriv u a * ↑(v a) ∂volume := by
+    apply MeasureTheory.integral_Ioi_mul_deriv_eq_deriv_mul (a' := u 0 * ↑(v 0)) (b' := 0)
+    · intro x hx
+      exact (h_u_deriv_eq x)
+    · intro x hx
+      exact (h_v_deriv_eq2 x)
+    · exact h_int_uv'.restrict
+    · exact h_int_u'v.restrict
+    · have h_cont_uv : ContinuousAt (fun x => u x * ↑(v x)) 0 :=
+        ContinuousAt.mul (h_u_deriv_eq 0).continuousAt (h_v_deriv_eq2 0).continuousAt
+      exact h_cont_uv.tendsto.mono_left nhdsWithin_le_nhds
+    · exact h_uv_top
 
-  have hIPP:= integral_mul_deriv_eq_deriv_mul (u := u) (u' := fun a => deriv u a) (v := fun a => ↑(v a)) (v' := fun a => ↑(deriv v a)) (a' := 0) (b' := 0) (fun a => h_u_deriv_eq a) (fun a => h_v_deriv_eq2 a) (h_int_uv') (h_int_u'v) (h_uv_bot) (h_uv_top)
-  simp at hIPP
-  have: ∫ (a : ℝ), deriv (fun u ↦ f u * cexp (-(↑u - ↑↑t) * ↑γ)) a * ↑(DirichletSin (T * (a - ↑t)))=∫ (x : ℝ), deriv u x * ↑(v x):= by
-    unfold u
-    unfold v
-    congr
+  unfold u v at h_IPP_Ici
+  have: 0 - u 0 * ↑(v 0)=  - f 0 * cexp ( ↑↑t * ↑γ) * ↑(DirichletSin (-T *  ↑t)):= by
+    unfold u v
+    simp
+  rw[this] at h_IPP_Ici
+
+  unfold μ_real at *
+  unfold non_negative_reals
+  have h_Ioi_eq_Ici : ∫ (a : ℝ) in Ioi 0, u a * ↑(deriv v a) = ∫ (a : ℝ) in Ici 0, u a * ↑(deriv v a) := by
+    have h_zero_null : volume ({0} : Set ℝ) = 0 := by
+      exact measure_singleton 0
+    have h_union : Ici (0:ℝ) = {0} ∪ Ioi 0 := by
+      ext x
+      rw [Set.mem_Ici, Set.mem_union, Set.mem_singleton_iff, Set.mem_Ioi]
+      rw [eq_comm]
+      exact le_iff_eq_or_lt
+
+    have h_split : ∫ (a : ℝ) in Ici 0, u a * ↑(deriv v a) =
+    (∫ (a : ℝ) in {0}, u a * ↑(deriv v a)) + ∫ (a : ℝ) in Ioi 0, u a * ↑(deriv v a) := by
+      simp_rw [h_union]
+      have h_disj : Disjoint ({0} : Set ℝ) (Ioi 0) := by
+        rw [Set.disjoint_singleton_left]
+        unfold Ioi
+        rw [Set.mem_setOf_eq]
+        exact lt_irrefl 0
+      exact MeasureTheory.setIntegral_union h_disj measurableSet_Ioi h_int_uv'.restrict h_int_uv'.restrict
+    have h_meas_zero : volume ({0} : Set ℝ) = 0 := measure_singleton 0
+    have h_int_zero : (∫ (a : ℝ) in {0}, u a * ↑(deriv v a)) = 0 := by
+      apply MeasureTheory.setIntegral_measure_zero (fun a ↦  u a * ↑(deriv v a)) h_meas_zero
+
+    rw[h_int_zero] at h_split
+    simp at h_split
+    rw[h_split]
+
+  rw[h_Ioi_eq_Ici] at h_IPP_Ici
+
+  have h_Ioi_eq_Ici2 : ∫ (a : ℝ) in Ioi 0, deriv (fun a ↦ f a * cexp (-(↑a - ↑↑t) * ↑γ)) a * ↑(DirichletSin (T * (a - ↑t))) = ∫ (a : ℝ) in Ici 0, deriv (fun a ↦ f a * cexp (-(↑a - ↑↑t) * ↑γ)) a * ↑(DirichletSin (T * (a - ↑t))) := by
+    have h_zero_null : volume ({0} : Set ℝ) = 0 := by
+      exact measure_singleton 0
+    have h_union : Ici (0:ℝ) = {0} ∪ Ioi 0 := by
+      ext x
+      rw [Set.mem_Ici, Set.mem_union, Set.mem_singleton_iff, Set.mem_Ioi]
+      rw [eq_comm]
+      exact le_iff_eq_or_lt
+
+    have h_split : ∫ (a : ℝ) in Ici 0, deriv (fun a ↦ f a * cexp (-(↑a - ↑↑t) * ↑γ)) a * ↑(DirichletSin (T * (a - ↑t))) =
+    (∫ (a : ℝ) in {0}, deriv (fun a ↦ f a * cexp (-(↑a - ↑↑t) * ↑γ)) a * ↑(DirichletSin (T * (a - ↑t)))) + ∫ (a : ℝ) in Ioi 0, deriv (fun a ↦ f a * cexp (-(↑a - ↑↑t) * ↑γ)) a * ↑(DirichletSin (T * (a - ↑t))) := by
+      simp_rw [h_union]
+      have h_disj : Disjoint ({0} : Set ℝ) (Ioi 0) := by
+        rw [Set.disjoint_singleton_left]
+        unfold Ioi
+        rw [Set.mem_setOf_eq]
+        exact lt_irrefl 0
+
+      exact MeasureTheory.setIntegral_union h_disj measurableSet_Ioi h_int_u'v.restrict h_int_u'v.restrict
+    have h_meas_zero : volume ({0} : Set ℝ) = 0 := measure_singleton 0
+    have h_int_zero : (∫ (a : ℝ) in {0}, deriv (fun a ↦ f a * cexp (-(↑a - ↑↑t) * ↑γ)) a * ↑(DirichletSin (T * (a - ↑t)))) = 0 := by
+      apply MeasureTheory.setIntegral_measure_zero (fun a ↦  deriv (fun a ↦ f a * cexp (-(↑a - ↑↑t) * ↑γ)) a * ↑(DirichletSin (T * (a - ↑t)))) h_meas_zero
+
+    rw[h_int_zero] at h_split
+    have: 0 + ∫ (a : ℝ) in Ioi 0, deriv (fun a ↦ f a * cexp (-(↑a - ↑↑t) * ↑γ)) a * ↑(DirichletSin (T * (a - ↑t)))= ∫ (a : ℝ) in Ioi 0, deriv (fun a ↦ f a * cexp (-(↑a - ↑↑t) * ↑γ)) a * ↑(DirichletSin (T * (a - ↑t))):= by
+      simp
+    rw[this] at h_split
+    rw[h_split.symm]
+  rw[h_Ioi_eq_Ici2] at h_IPP_Ici
+  exact h_IPP_Ici
+
+
+theorem Tendsto_Dirichlet_Integral (f : ℝ → ℂ) (γ: ℝ)(S: Set ℝ)(hS : ∀ x ∈ S, 0 < x)(t: S)
+  (h_cont : Continuous f)
+  (h_diff : Differentiable ℝ f)
+  (h_int : Integrable (fun t ↦ f t * cexp (-γ * t)))
+  (h_diff_int : Integrable (fun t ↦ (deriv f t) * cexp (-γ * t)))  :
+  Tendsto (fun T : ℝ ↦ ∫ a, deriv (fun x ↦ f x * cexp (-((x - t) : ℝ) * γ)) a * ↑(DirichletSin (T * (a - t)))∂μ_real)
+    atTop (𝓝 (-(f t))) := by
+    rcases t with ⟨t_val, ht_mem⟩
+    have ht_pos : 0 < t_val := hS t_val ht_mem
+    have h_max : max 0 t_val = t_val := max_eq_right ht_pos.le
+    simp only [Subtype.coe_mk]
+
+
+    have hd_derivAt :  ∀ k:ℝ, HasDerivAt (fun k : ℝ ↦ cexp (-↑γ * ↑k)) (cexp (-↑γ * ↑k)*(-↑γ) ) k := by
+          intro k
+          apply HasDerivAt.cexp
+          have h_id_coe : HasDerivAt (fun x : ℝ ↦ (↑x:ℂ )) 1 k := by
+            exact HasDerivAt.ofReal_comp (hasDerivAt_id k)
+          have h_coe_final:= h_id_coe.const_mul (-↑γ)
+          have: -↑γ * (1:ℂ) = -↑γ:= by simp
+          simp_rw[this] at h_coe_final
+          exact h_coe_final
+
+    let u := fun a : ℝ ↦ f a * cexp (-(a - t_val) * γ)
+    have h_has_deriv_u : ∀ a:ℝ, HasDerivAt u (deriv f a * cexp (-(a - t_val) * γ) - f a * γ * cexp (-(a - t_val) * γ)) a := by
+      have h_has_deriv_t_inS:= CExpDerivAt f γ S ⟨t_val, ht_mem⟩ h_diff
+      unfold u
+      simp only [Subtype.coe_mk] at h_has_deriv_t_inS
+      exact h_has_deriv_t_inS
+
+
+    have h_deriv_u_eq : ∀ a, deriv u a = deriv f a * cexp (-(a - t_val) * γ) - f a * γ * cexp (-(a - t_val) * γ) := by
+      intro a
+      exact (h_has_deriv_u a).deriv
+
+    have h_int_u' : Integrable (fun a => deriv u a) := by
+      simp_rw [h_deriv_u_eq]
+      apply Integrable.sub
+      · have h_int_shifted : Integrable (fun a ↦ (deriv f a * cexp (-(↑a - ↑t_val) * ↑γ))) := by
+          have:(fun a ↦ (deriv f a * cexp (-(↑a - ↑t_val) * ↑γ))) = fun x ↦ deriv f x * cexp (- ↑γ* ↑x) * cexp (↑t_val * ↑γ) := by
+            funext x
+            ring_nf
+            rw[Complex.exp_add]
+            field_simp
+          rw[this]
+          apply Integrable.mul_const
+          exact h_diff_int
+        exact h_int_shifted
+      · have h_int_f_shifted : Integrable (fun a ↦ (f a * ↑γ * cexp (-(↑a - ↑t_val) * ↑γ))) := by
+          have:(fun a ↦ (f a * ↑γ* cexp (-(↑a - ↑t_val) * ↑γ))) = fun x ↦ ↑γ*f x * cexp (- ↑γ* ↑x) * cexp (↑t_val * ↑γ) := by
+            funext x
+            simp_rw [neg_sub]
+            have: cexp ((↑t_val - ↑x) * ↑γ)= cexp (↑t_val* ↑γ - ↑x* ↑γ):= by
+              ring_nf
+            rw[this]
+            rw[Complex.exp_sub]
+            field_simp
+            have: cexp (↑γ * ↑x) * cexp (-(↑γ * ↑x))=1 := by
+              rw [← Complex.exp_add]
+              ring_nf
+              rw[Complex.exp_zero]
+            by_cases h_f: f x =0
+            simp[h_f]
+            by_cases h_gamma: γ =0
+            simp[h_gamma]
+            field_simp[h_f,h_gamma]
+            rw[this]
+          rw[this]
+          apply Integrable.mul_const
+          have: (fun x ↦ ↑γ * f x * cexp (-↑γ * ↑x))= fun x ↦ ↑γ *( f x * cexp (-↑γ * ↑x)):= by
+            funext x
+            ring_nf
+          rw[this]
+          apply Integrable.const_mul (f:= fun x ↦ f x * cexp (-↑γ * ↑x)) (c:=↑γ)
+          exact h_int
+        exact h_int_f_shifted
+
+    have: (fun a => deriv (fun x ↦ f x * cexp (-↑(x - ↑t_val) * ↑γ)) a)= fun a => deriv u a:= by
+      funext a
+      unfold u
+      simp
+    simp_rw[this]
+    have h_u_dirichletInt:= Tendsto_Integral_DirichletSin_times_integrableFunction_zero' (fun a ↦ (deriv u) a) t_val h_int_u'
+    simp at h_u_dirichletInt
+
+    have h_lim_inf : Tendsto u atTop (𝓝 0) := by
+      have h_eq : u  = fun a ↦ (f a * cexp (-↑γ * ↑a)) * cexp (↑γ * ↑t_val) := by
+        funext a
+        simp [u]
+
+        have: f a * cexp (-(↑γ * ↑a)) * cexp (↑γ * ↑↑t_val)= f a * cexp (-(↑γ * ↑a)+↑γ * ↑↑t_val):= by
+          by_cases h_f: f a =0
+          simp[h_f]
+          field_simp[h_f]
+          rw [← Complex.exp_add]
+          ring_nf
+        simp_rw[this]
+        ring_nf
+
+      simp_rw [h_eq]
+      have : (𝓝 (0:ℂ))= (𝓝 (0 * cexp (↑γ * ↑↑t_val))):= by
+        simp
+      rw[this]
+      apply Tendsto.mul_const
+      let g := fun k ↦ f k * cexp (-↑γ * ↑k)
+      have h_g_diff_int : Integrable (deriv g) volume := by
+        simp only [g]
+        have h_deriv_eq : ∀ k, deriv g k = (deriv f k * cexp (-↑γ * ↑k)) + (f k * (-↑γ * cexp (-↑γ * ↑k))) := by
+          intro k
+          unfold g
+          have hd : DifferentiableAt ℝ (fun k:ℝ ↦ cexp (-↑γ * ↑k)) k := by
+            exact (hd_derivAt k).differentiableAt
+          rw[ deriv_fun_mul (h_diff.differentiableAt) hd]
+          rw [(hd_derivAt k).deriv]
+          ring_nf
+        rw [funext h_deriv_eq]
+        apply Integrable.add
+        · exact h_diff_int
+        · have : (fun x ↦ f x * (-↑γ * cexp (-↑γ * ↑x)))= (fun x ↦ (-↑γ)* (f x *  cexp (-↑γ * ↑x))):= by
+            funext x
+            ring_nf
+          rw[this]
+          exact Integrable.const_mul h_int (-↑γ)
+      unfold g at h_g_diff_int
+      apply tendsto_zero_of_hasDerivAt_of_integrableOn_Ioi (a:= 0)
+      · intro x hx
+        have h_deriv_eq : HasDerivAt (fun k ↦ f k * cexp (-↑γ * ↑k)) (deriv f x * cexp (-↑γ * ↑x) + f x * (-↑γ * cexp (-↑γ * ↑x))) x := by
+          have:= (h_diff.differentiableAt).hasDerivAt.mul (hd_derivAt x)
+          have h_rew : HasDerivAt (f * fun k:ℝ ↦ cexp (-↑γ * ↑k)) (deriv f x * cexp (-↑γ * ↑x) + f x * (-↑γ * cexp (-↑γ * ↑x))) x := by
+            simpa [mul_comm] using this
+          exact h_rew
+        exact h_deriv_eq
+      · have h_deriv_eq : ∀ x:ℝ, HasDerivAt (fun k ↦ f k * cexp (-↑γ * ↑k)) (deriv f x * cexp (-↑γ * ↑x) + f x * (-↑γ * cexp (-↑γ * ↑x))) x := by
+          intro x
+          have:= (h_diff.differentiableAt).hasDerivAt.mul (hd_derivAt x)
+          have h_rew : HasDerivAt (f * fun k:ℝ ↦ cexp (-↑γ * ↑k)) (deriv f x * cexp (-↑γ * ↑x) + f x * (-↑γ * cexp (-↑γ * ↑x))) x := by
+            simpa [mul_comm] using this
+          exact h_rew
+        have : (fun x ↦ deriv f x * cexp (-↑γ * ↑x) + f x * (-↑γ * cexp (-↑γ * ↑x))) = (fun x ↦ deriv (fun k ↦ f k * cexp (-↑γ * ↑k)) x) := by
+          ext x
+          rw [(h_deriv_eq x).deriv]
+        rw [this]
+        apply Integrable.integrableOn
+        exact h_g_diff_int
+      · apply Integrable.integrableOn
+        exact h_int
+
+    have h_integral_val : ∫ (a : ℝ) in Ioi ↑t_val, deriv u a = - u ↑t_val := by
+      rw [show ( deriv u= fun x ↦ deriv f x * cexp (-(↑x - ↑↑t_val) * ↑γ) - f x * ↑γ * cexp (-(↑x - ↑↑t_val) * ↑γ)) from funext h_deriv_u_eq]
+      rw [show ( deriv u= fun x ↦ deriv f x * cexp (-(↑x - ↑↑t_val) * ↑γ) - f x * ↑γ * cexp (-(↑x - ↑↑t_val) * ↑γ)) from funext h_deriv_u_eq] at h_int_u'
+
+      have := integral_Ioi_of_hasDerivAt_of_tendsto ((h_has_deriv_u ↑t_val).continuousAt.continuousWithinAt) (fun x _hx ↦ h_has_deriv_u x) (h_int_u'.integrableOn) (h_lim_inf)
+      simp at this
+      simp
+      exact this
+    rw[h_max] at  h_u_dirichletInt
+    rw[h_integral_val] at  h_u_dirichletInt
+    have :  𝓝 (-u ↑t_val) =  𝓝 (-f ↑t_val):= by
+      unfold u
+      simp
+    rw[this] at h_u_dirichletInt
+    unfold μ_real
+    unfold non_negative_reals
+    have h_integral_eq : ∀ T, ∫ (a : ℝ) in Ici 0, deriv u a * ↑(DirichletSin (T * (a - t_val)))
+                          = ∫ (a : ℝ) in Ioi 0, deriv u a * ↑(DirichletSin (T * (a - t_val))) := by
+      intro T
+      apply integral_Ici_eq_integral_Ioi
+    simp_rw[h_integral_eq]
+    exact h_u_dirichletInt
+
+lemma Tendsto_Dirichlet_Integral_times_const(f : ℝ → ℂ) (γ: ℝ)(S: Set ℝ) (hS : ∀ x ∈ S, 0 < x)(t: S):
+Tendsto (fun T : ℝ ↦ -f 0 * cexp (↑↑t * ↑γ) * ↑(DirichletSin (-T * ↑t))) atTop (𝓝 (0)):= by
+  have ht_pos : 0 < (t : ℝ) := hS t t.prop
+  have ht_neg : - (t : ℝ) < 0 := by linarith
+  have h_lim_dirichlet : Tendsto (fun T ↦ DirichletSin (T * -(t : ℝ))) atTop (𝓝 (HeavisidePerso (-(t : ℝ)))) := by
+    apply lim_S_Rx (-(t : ℝ))
+  unfold HeavisidePerso at h_lim_dirichlet
+  split_ifs at h_lim_dirichlet
+  linarith [ht_neg]
+  linarith [ht_neg]
+  have h_complex : Tendsto (fun T ↦ (DirichletSin (T * -↑t) : ℂ)) atTop (𝓝 0) := by
+    rw [← Complex.ofReal_zero]
+    apply Tendsto.ofReal
+    exact h_lim_dirichlet
+  have:  (𝓝 (0:ℂ))=  (𝓝 (-f 0 * cexp (↑↑t * ↑γ) *0)):= by
+    simp
   rw[this]
-  exact hIPP
+  apply Tendsto.const_mul
+  have: (fun T ↦ (↑(DirichletSin (T * -t)):ℂ ))= fun T ↦ (↑(DirichletSin (-T * ↑t)):ℂ ):= by
+    funext T
+    simp
+
+  simp_rw[this] at h_complex
+  exact h_complex
+
+
+theorem IsInverseLaplace (f : ℝ → ℂ) (γ : ℝ) (S : Set ℝ) (hS : ∀ x ∈ S, 0 < x)
+    (h_cont : Continuous f)
+    (h_int :Integrable (fun t ↦ f t * cexp (-(↑γ * ↑t))) volume)
+    (hMeasurable : Measurable f)
+    (h_Laplace_int : ∀ t ∈ S, Integrable ((InverseLaplaceKernelFunctT (RealLaplaceTransform f) t) γ) volume)
+    (h_diff : Differentiable ℝ f)
+    (h_diff_int : Integrable (fun t ↦ (deriv f t) * cexp (-γ * t))) :
+    ∀ (t : S), (inverseLaplaceFunction (RealLaplaceTransform f) γ S h_Laplace_int) t = f t := by
+  intro t
+  have h_lim_LHS : Tendsto (fun T ↦ inverseLaplaceFunctionBounded (RealLaplaceTransform f) γ T S h_Laplace_int t)
+      atTop (𝓝 ((inverseLaplaceFunction (RealLaplaceTransform f) γ S h_Laplace_int) t)) := by
+    simp only [inverseLaplaceFunction, inverseLaplaceFunctionBounded, inverseLaplace_t, inverseLaplace_tBounded]
+    apply Tendsto.const_mul
+    apply Tendsto.congr'
+    · filter_upwards [Filter.eventually_ge_atTop 0] with k hk
+      rw [MeasureTheory.integral_Icc_eq_integral_Ioc]
+    · apply Tendsto.congr'
+      filter_upwards [Filter.eventually_ge_atTop 0] with k hk
+      have hmink_le_k: -k≤k:= by
+        linarith[hk]
+      rw[← intervalIntegral.integral_of_le hmink_le_k]
+      apply intervalIntegral_tendsto_integral
+      exact h_Laplace_int t t.2
+      exact tendsto_neg_atTop_atBot
+      exact tendsto_id
 
 
 
+  have h_lim_RHS : Tendsto (fun T ↦ inverseLaplaceFunctionBounded (RealLaplaceTransform f) γ T S h_Laplace_int t)
+      atTop (𝓝 (f t)) := by
+    apply Filter.Tendsto.congr'
+    filter_upwards [Filter.eventually_ge_atTop 0] with T hT
+    rw [IsInverseLaplaceBounded f γ T S h_cont h_int hMeasurable h_Laplace_int h_diff h_diff_int hT t]
+
+    have: (fun t ↦ f t * cexp (-(↑γ * ↑t)))= fun t ↦ f t * cexp (-↑γ * ↑t):= by
+      funext t
+      ring_nf
+    rw[this] at h_int
+    apply Filter.Tendsto.congr'
+    filter_upwards [Filter.eventually_ge_atTop 0] with T hT
+    rw [ IsInverseLaplaceBounded' f γ T S h_cont h_diff h_int h_diff_int hT t]
+    have : (𝓝 (f ↑t)) = (𝓝 (0-(- f ↑t))):= by
+      simp
+    rw[this]
+    apply Tendsto.sub
+    · exact Tendsto_Dirichlet_Integral_times_const f γ S hS t
+    · have:= Tendsto_Dirichlet_Integral f γ S hS t h_cont h_diff h_int h_diff_int
+      push_cast at this
+      exact this
 
 
-
+  apply tendsto_nhds_unique h_lim_LHS
+  apply Filter.Tendsto.congr' _ h_lim_RHS
+  filter_upwards [Filter.eventually_ge_atTop 0] with T hT
+  rfl
 
 end LaplaceInverse
 section LaplaceTable

@@ -1907,6 +1907,15 @@ noncomputable def DirichletSin : ℝ → ℝ :=
 noncomputable def HeavisidePerso (x : ℝ) : ℝ :=
   if x > 0 then 1 else if x = 0 then 1/2 else 0
 
+lemma HeavisideNorm_le_one : ∀ a:ℝ, ‖HeavisidePerso  a‖ ≤ 1 := by
+  unfold HeavisidePerso
+  intro a
+  split_ifs with h1 h2
+  ·simp
+  ·norm_num
+  ·norm_num
+
+
 theorem lim_S_Rx (x : ℝ) : Tendsto (fun R : ℝ ↦   DirichletSin (R * x)) atTop (𝓝 (HeavisidePerso x)) := by
   unfold DirichletSin HeavisidePerso
   split_ifs with hx hx0
@@ -1975,3 +1984,679 @@ theorem lim_S_Rx (x : ℝ) : Tendsto (fun R : ℝ ↦   DirichletSin (R * x)) at
     apply Tendsto.mul
     apply tendsto_const_nhds
     exact h_integral_limit
+
+lemma DirichletSin_continuous : Continuous fun u ↦ DirichletSin (u):= by
+  unfold DirichletSin
+  apply Continuous.add
+  · continuity
+  · apply Continuous.mul
+    · continuity
+    · apply intervalIntegral.continuous_primitive
+      apply Continuous.intervalIntegrable
+      exact continuous_sinc
+
+lemma DirichletSin_continuous_comp (T:ℝ)(t:ℝ):Continuous fun x ↦ (DirichletSin (T * (x - t))):= by
+  unfold DirichletSin
+  push_cast
+  apply Continuous.add
+  · continuity
+  · apply Continuous.mul
+    · continuity
+    · have : Continuous (fun x ↦ (∫ (t : ℝ) in 0..T * (x - ↑t), sinc t)):= by
+        let F := fun (u : ℝ) ↦ ∫ (s : ℝ) in (0)..u, sinc s
+        let g := fun (x : ℝ) ↦ T * (x - t)
+        change Continuous (F ∘ g)
+        apply Continuous.comp
+        apply intervalIntegral.continuous_primitive
+        apply Continuous.intervalIntegrable
+        exact continuous_sinc
+        unfold g
+        apply Continuous.mul
+        apply continuous_const
+        apply Continuous.sub
+        apply continuous_id
+        apply continuous_const
+      exact this
+
+
+theorem DirichletSinBoundedComp(T t: ℝ ) (hT: T≥ 0):  ∃ C:ℝ, ∀ x, |DirichletSin (T * (x - t))| ≤ C := by
+    by_cases hT_z: T=0
+    · unfold DirichletSin
+      simp[hT_z]
+      use (1:ℝ)
+      linarith
+    · have h_cont_v:= DirichletSin_continuous_comp T t
+
+      have h_lim_top : Tendsto (fun x↦ DirichletSin (T * (x - t))) atTop (𝓝 1) := by
+        have h_limit : Tendsto (fun R : ℝ ↦ T * (R - ↑t)) atTop atTop := by
+          have h_rw : (fun R : ℝ ↦ T * (R - ↑t))= (fun R : ℝ ↦T*R -T*↑t):= by
+            funext R
+            ring_nf
+          rw[h_rw]
+          apply tendsto_atTop_add_const_right (f:= fun R : ℝ ↦ T * R )
+          have:  (fun R ↦ T * R) =  (fun R ↦ R * T) := by
+            funext R
+            ring_nf
+          rw[this]
+          apply Tendsto.atTop_mul_const
+          have: 0≠ T := by
+            push_neg at hT_z
+            exact hT_z.symm
+          exact lt_of_le_of_ne hT this
+          exact tendsto_id
+
+        have h_int_dir:=integral_dirichlet.comp h_limit
+        unfold DirichletSin
+        have: (𝓝 1)=𝓝 (1/2 + 1/π * (π/2)):= by
+          field_simp
+          ring_nf
+        rw[this]
+        apply tendsto_const_nhds.add
+        apply tendsto_const_nhds.mul
+        exact h_int_dir
+
+      have h_lim_bot : Tendsto (fun x↦ DirichletSin (T * (x - t))) atBot (𝓝 (0)) := by
+        unfold DirichletSin
+
+        have h_limit : Tendsto (fun R : ℝ ↦ T * (R - ↑t)) atBot atBot := by
+          have h_rw : (fun R : ℝ ↦ T * (R - ↑t))= (fun R : ℝ ↦T*R -T*↑t):= by
+            funext R
+            ring_nf
+          rw[h_rw]
+          apply tendsto_atBot_add_const_right (f:= fun R : ℝ ↦ T * R )
+          have:  (fun R ↦ T * R) =  (fun R ↦ R * T) := by
+            funext R
+            ring_nf
+          rw[this]
+          apply Tendsto.atBot_mul_const
+          have: 0≠ T := by
+            push_neg at hT_z
+            exact hT_z.symm
+          exact lt_of_le_of_ne hT this
+          exact tendsto_id
+        have h_int_antisym : ∀ T, ∫ t in (0)..T, Real.sinc t = - ∫ t in (0)..(-T), Real.sinc t := by
+          have h_int_sinc_sym: ∀ T, ∫ t in (0)..T, Real.sinc t=  ∫ t in (0)..T, Real.sinc (-t):= by
+            intro T
+            congr
+            funext t
+            simp[Real.sinc_neg]
+          intro T
+          rw[h_int_sinc_sym]
+          rw [intervalIntegral.integral_comp_neg (fun t ↦ Real.sinc t)]
+          simp
+          rw [intervalIntegral.integral_symm]
+
+        have h_dirichletBot: Tendsto (fun T ↦ ∫ t in 0..T, Real.sinc t) atBot (𝓝 (-π/2)) := by
+          have h := integral_dirichlet.comp tendsto_neg_atBot_atTop
+          simp only [Function.comp_def] at h
+          have h_final := h.neg
+          simp only [← h_int_antisym] at h_final
+          have: 𝓝 (-(π / 2))= 𝓝 (-π / 2):= by field_simp
+          rw[this] at h_final
+          exact h_final
+        have h_integral_limit : Tendsto (fun R ↦ ∫ t in 0..T * (R - ↑t), Real.sinc t) atBot (𝓝 (-π / 2)) :=
+          h_dirichletBot.comp h_limit
+        have: (𝓝 (0:ℝ))= 𝓝 ((1/2:ℝ)- (1/2:ℝ)) := by simp
+        rw[this]
+        apply Tendsto.add
+        apply tendsto_const_nhds
+
+        have: (𝓝 (-(1 / 2) :ℝ))= 𝓝 ((1/π :ℝ)*(-π/2:ℝ)) := by field_simp
+        rw[this]
+        apply Tendsto.mul
+        apply tendsto_const_nhds
+        exact h_integral_limit
+      have h_norm_lim := h_lim_bot.norm
+      have: (𝓝 ‖(0:ℝ)‖)= (𝓝 0):= by simp
+      rw[this] at h_norm_lim
+      rw [Metric.tendsto_atTop] at h_lim_top
+      obtain ⟨R_top, hR_top⟩ := h_lim_top 1 zero_lt_one
+      have h_v_lt : ∀ᶠ (x : ℝ) in atBot, ‖(fun x↦ DirichletSin (T * (x - t))) x‖ < 1 :=
+  Filter.Tendsto.eventually_lt_const zero_lt_one h_norm_lim
+      obtain ⟨R_bot, hR_bot_forall⟩ := Filter.mem_atBot_sets.1 h_v_lt
+      let a := min R_bot R_top
+      let b := max R_bot R_top
+      have h_subset : Set.Icc a b ⊆ Set.Icc a b := rfl.subset
+      have h_cont_on : ContinuousOn (fun x↦ DirichletSin (T * (x - t))) (Set.Icc a b) := h_cont_v.continuousOn
+      have h_img_compact : IsCompact ((fun x↦ DirichletSin (T * (x - t))) '' Set.Icc a b) := isCompact_Icc.image h_cont_v
+      have h_img_bdd : Bornology.IsBounded ((fun x↦ DirichletSin (T * (x - t))) '' Set.Icc a b) :=
+  h_img_compact.isBounded
+      obtain ⟨M, hM_pos, hM⟩ := Bornology.IsBounded.exists_pos_norm_le h_img_bdd
+      use max M 2
+      intro x
+      rw [← Real.norm_eq_abs]
+      rcases lt_trichotomy x a with (hx_lt_a | hx_mid_or_right)
+      · have hx_bot : x ≤ R_bot := le_trans (le_of_lt hx_lt_a) (min_le_left _ _)
+        have h_mem := hR_bot_forall x hx_bot
+        have h_lt : ‖(fun x↦ DirichletSin (T * (x - t))) x‖ < 1 := h_mem
+        apply le_trans _ (le_max_right M 2)
+        apply le_trans (le_of_lt h_lt)
+        linarith
+      · by_cases hxb : x∈ Icc a b
+        · have h_vx_mem : (fun x↦ DirichletSin (T * (x - t))) x ∈ (fun x↦ DirichletSin (T * (x - t))) '' Icc a b := mem_image_of_mem (fun x↦ DirichletSin (T * (x - t))) hxb
+          have h_le_M : ‖(fun x↦ DirichletSin (T * (x - t))) x‖ ≤ M := hM ((fun x↦ DirichletSin (T * (x - t))) x) h_vx_mem
+          exact h_le_M.trans (le_max_left M 2)
+        · have hax : a ≤ x := hx_mid_or_right.elim (fun h => h.symm.le) (fun h => h.le)
+          have h_x_gt_b : x > b := by
+            rw [mem_Icc, not_and_or] at hxb
+            cases hxb with
+              | inl h_lt_a => exact (h_lt_a hax).elim
+              | inr h_gt_b => exact not_le.mp h_gt_b
+          have h_x_gt_Rtop : x > R_top :=by
+            have h_b_ge : b ≥ R_top := le_max_right R_bot R_top
+            linarith
+          have h_dist : dist ((fun x↦ DirichletSin (T * (x - t))) x) 1 < 1 := hR_top x (le_of_lt h_x_gt_Rtop)
+          rw [dist_eq_norm] at h_dist
+          have h_norm_2 : ‖(fun x↦ DirichletSin (T * (x - t))) x‖ < 2 := by
+            calc ‖(fun x↦ DirichletSin (T * (x - t))) x‖ = ‖((fun x↦ DirichletSin (T * (x - t))) x - 1) + 1‖ := by ring_nf
+              _ ≤ ‖(fun x↦ DirichletSin (T * (x - t))) x - 1‖ + ‖(1 : ℝ)‖ := norm_add_le _ _
+              _ < 1 + 1 := by
+                simp
+                rw[←Real.norm_eq_abs]
+                exact h_dist
+              _ = 2 := by ring_nf
+          apply le_trans _ (le_max_right M 2)
+          exact le_of_lt h_norm_2
+
+theorem DirichletSinBounded:  ∃ C:ℝ, ∀ u, |DirichletSin (u)| ≤ C := by
+  have h_cont_v:= DirichletSin_continuous
+  have h_lim_top : Tendsto (fun u↦ DirichletSin (u)) atTop (𝓝 1) := by
+    have hdirichlet_integral:=integral_dirichlet
+    unfold DirichletSin
+    have: (𝓝 (1:ℝ))= (𝓝 ((1/2:ℝ) + 1/π*(π/2))):= by
+      field_simp
+      ring_nf
+    rw[this]
+    apply tendsto_const_nhds.add
+    apply tendsto_const_nhds.mul hdirichlet_integral
+
+  have h_lim_bot : Tendsto (fun u↦ DirichletSin u) atBot (𝓝 (0)) := by
+    unfold DirichletSin
+    have h_dirichletBot: Tendsto (fun T ↦ ∫ t in 0..T, Real.sinc t) atBot (𝓝 (-π/2)) := by
+      have h := integral_dirichlet.comp tendsto_neg_atBot_atTop
+      simp only [Function.comp_def] at h
+      have h_final := h.neg
+      have h_int_antisym : ∀ T, ∫ t in (0)..T, Real.sinc t = - ∫ t in (0)..(-T), Real.sinc t := by
+          have h_int_sinc_sym: ∀ T, ∫ t in (0)..T, Real.sinc t=  ∫ t in (0)..T, Real.sinc (-t):= by
+            intro T
+            congr
+            funext t
+            simp[Real.sinc_neg]
+          intro T
+          rw[h_int_sinc_sym]
+          rw [intervalIntegral.integral_comp_neg (fun t ↦ Real.sinc t)]
+          simp
+          rw [intervalIntegral.integral_symm]
+      simp only [← h_int_antisym] at h_final
+      have: 𝓝 (-(π / 2))= 𝓝 (-π / 2):= by field_simp
+      rw[this] at h_final
+      exact h_final
+    have: (𝓝 (0:ℝ))= (𝓝 ((1/2:ℝ) + 1/π*(-π/2))):= by
+      field_simp
+      ring_nf
+    rw[this]
+    apply tendsto_const_nhds.add
+    apply tendsto_const_nhds.mul h_dirichletBot
+
+  have h_norm_lim := h_lim_bot.norm
+  have: (𝓝 ‖(0:ℝ)‖)= (𝓝 0):= by simp
+  rw[this] at h_norm_lim
+  rw [Metric.tendsto_atTop] at h_lim_top
+  obtain ⟨R_top, hR_top⟩ := h_lim_top 1 zero_lt_one
+  have h_v_lt : ∀ᶠ (u : ℝ) in atBot, (fun x ↦ ‖DirichletSin x‖) u < 1 :=
+    Filter.Tendsto.eventually_lt_const (f:= fun x ↦ ‖DirichletSin x‖) zero_lt_one h_norm_lim
+  obtain ⟨R_bot, hR_bot_forall⟩ := Filter.mem_atBot_sets.1 h_v_lt
+  let a := min R_bot R_top
+  let b := max R_bot R_top
+  have h_subset : Set.Icc a b ⊆ Set.Icc a b := rfl.subset
+  have h_cont_on : ContinuousOn (fun u↦ DirichletSin u) (Set.Icc a b) := h_cont_v.continuousOn
+  have h_img_compact : IsCompact ((fun u↦ DirichletSin u) '' Set.Icc a b) := isCompact_Icc.image h_cont_v
+  have h_img_bdd : Bornology.IsBounded ((fun u↦ DirichletSin u ) '' Set.Icc a b) := h_img_compact.isBounded
+  obtain ⟨M, hM_pos, hM⟩ := Bornology.IsBounded.exists_pos_norm_le h_img_bdd
+  use max M 2
+  intro u
+  rw [← Real.norm_eq_abs]
+  rcases lt_trichotomy u a with (hu_lt_a | hu_mid_or_right)
+  · have hu_bot : u ≤ R_bot := le_trans (le_of_lt hu_lt_a) (min_le_left _ _)
+    have h_mem := hR_bot_forall u hu_bot
+    have h_lt : ‖(fun x↦ DirichletSin x) u‖ < 1 := h_mem
+    apply le_trans _ (le_max_right M 2)
+    apply le_trans (le_of_lt h_lt)
+    linarith
+  · by_cases hub : u∈ Icc a b
+    · have h_vx_mem : (fun x↦ DirichletSin x) u ∈ (fun x↦ DirichletSin x) '' Icc a b := mem_image_of_mem (fun x↦ DirichletSin x) hub
+      have h_le_M : ‖(fun x↦ DirichletSin x) u‖ ≤ M := hM ((fun x↦ DirichletSin x) u) h_vx_mem
+      exact h_le_M.trans (le_max_left M 2)
+    · have hau : a ≤ u := hu_mid_or_right.elim (fun h => h.symm.le) (fun h => h.le)
+      have h_x_gt_b : u > b := by
+        rw [mem_Icc, not_and_or] at hub
+        cases hub with
+        | inl h_lt_a => exact (h_lt_a hau).elim
+        | inr h_gt_b => exact not_le.mp h_gt_b
+      have h_u_gt_Rtop : u > R_top :=by
+        have h_b_ge : b ≥ R_top := le_max_right R_bot R_top
+        linarith
+      have h_dist : dist ((fun x↦ DirichletSin x) u) 1 < 1 := hR_top u (le_of_lt h_u_gt_Rtop)
+      rw [dist_eq_norm] at h_dist
+      have h_norm_2 : ‖(fun x↦ DirichletSin x) u‖ < 2 := by
+        calc ‖(fun x↦ DirichletSin x) u‖ = ‖((fun x↦ DirichletSin x) u - 1) + 1‖ := by ring_nf
+          _ ≤ ‖(fun x↦ DirichletSin x) u - 1‖ + ‖(1 : ℝ)‖ := norm_add_le _ _
+          _ < 1 + 1 := by
+            simp
+            rw[←Real.norm_eq_abs]
+            exact h_dist
+          _ = 2 := by ring_nf
+      apply le_trans _ (le_max_right M 2)
+      exact le_of_lt h_norm_2
+
+
+lemma DirichletSinBoundedComp_forall (t : ℝ) :
+    ∃ C : ℝ, ∀ T , ∀ x : ℝ, |DirichletSin (T * (x - t))| ≤ C := by
+  obtain ⟨C, hC⟩ := DirichletSinBounded
+  exact ⟨C, fun T x => hC (T * (x - t))⟩
+
+theorem Integrable_DirichletSin_times_integrableFunction (f:ℝ → ℝ ) (T t: ℝ ) (hT: T≥ 0) (hf: Integrable (fun t ↦ f t )): Integrable (fun x => f x * DirichletSin (T * (x - t))):= by
+  obtain ⟨C, hC⟩ := DirichletSinBoundedComp T t hT
+  have g_AESM: AEStronglyMeasurable (fun x ↦ DirichletSin (T * (x - t))) volume:= by
+    apply Continuous.aestronglyMeasurable
+    exact DirichletSin_continuous_comp T t
+  have h_g_filter_bounded : ∀ᵐ (x : ℝ), ‖DirichletSin (T * (x - t))‖ ≤ C:= by
+    filter_upwards
+    simp_rw [Real.norm_eq_abs]
+    exact hC
+  apply MeasureTheory.Integrable.mul_bdd (f:= f) (g:=fun x => DirichletSin (T * (x - t)) ) (c:= C) hf g_AESM h_g_filter_bounded
+
+
+theorem Integrable_DirichletSin_times_integrableFunction' (f:ℝ → ℂ ) (T t: ℝ ) (hT: T≥ 0) (hf: Integrable (fun t ↦ f t )): Integrable (fun x => f x * ↑(DirichletSin (T * (x - t)))):= by
+  obtain ⟨C, hC⟩ := DirichletSinBoundedComp T t hT
+  have g_AESM: AEStronglyMeasurable (fun x ↦ (↑(DirichletSin (T * (x - t))) : ℂ)) volume:= by
+    apply Continuous.aestronglyMeasurable
+    have h_cont_re:=  (DirichletSin_continuous_comp T t)
+    exact continuous_ofReal.comp h_cont_re
+  have h_g_filter_bounded : ∀ᵐ (x : ℝ), ‖(↑(DirichletSin (T * (x - t))) : ℂ)‖ ≤ C:= by
+    filter_upwards
+    simp_rw[Complex.norm_real]
+    simp_rw [Real.norm_eq_abs]
+    exact hC
+  apply MeasureTheory.Integrable.mul_bdd (f:= f) (g:=fun x => DirichletSin (T * (x - t)) ) (c:= C) hf g_AESM h_g_filter_bounded
+
+
+theorem Tendsto_Integral_DirichletSin_times_integrableFunction (f:ℝ → ℝ ) (t: ℝ ) (hf: Integrable (fun t ↦ f t )):
+ Tendsto (fun T : ℝ ↦ ∫ a, f a * DirichletSin (T * (a - t)))
+    atTop (𝓝 (∫ a in Ioi t, f a)):= by
+  rcases DirichletSinBoundedComp_forall t with ⟨C, hC_uniform⟩
+  let g := fun a ↦ |f a| * |C|
+  have h_int_g : Integrable g := hf.abs.mul_const |C|
+
+  have h_dominated : ∀ T, ∀ᵐ a, |f a * DirichletSin (T * (a - t))| ≤ g a := by
+    intro T
+    apply Eventually.of_forall
+    intro a
+    rw [abs_mul]
+    refine mul_le_mul_of_nonneg_left (le_trans (hC_uniform T a) (le_abs_self C)) (abs_nonneg _)
+
+  let f_limit := fun a ↦ f a * HeavisidePerso (a - t)
+  have h_pointwise : ∀ᵐ a, Tendsto (fun T ↦ f a * DirichletSin (T * (a - t))) atTop (𝓝 (f_limit a)) := by
+    apply Eventually.of_forall
+    intro a
+    exact Tendsto.const_mul (f a) (lim_S_Rx (a - t))
+
+  have h_conv : Tendsto (fun T ↦ ∫ a, f a * DirichletSin (T * (a - t))) atTop (𝓝 (∫ a, f_limit a)) := by
+    apply tendsto_integral_filter_of_dominated_convergence g
+    · filter_upwards [eventually_ge_atTop 0] with T hT
+      exact (Integrable_DirichletSin_times_integrableFunction f T t hT hf).aestronglyMeasurable
+    · apply Eventually.of_forall
+      simp_rw [Real.norm_eq_abs]
+      exact h_dominated
+    · exact h_int_g
+    ·exact h_pointwise
+  unfold f_limit at h_conv
+  convert h_conv using 1
+  have h_pos : ∫ a in Ioi t, f a * HeavisidePerso (a - t) = ∫ a in Ioi t, f a := by
+    apply integral_congr_ae
+    rw [EventuallyEq, ae_restrict_iff' measurableSet_Ioi]
+    apply Filter.Eventually.of_forall
+    intro x hx
+    rw [Set.mem_Ioi] at hx
+    have hx_gt_t: x-t>0:= sub_pos_of_lt hx
+    unfold HeavisidePerso
+    simp[hx_gt_t]
+  have h_neg : ∫ a in (Ioi t)ᶜ, f a * HeavisidePerso (a - t) = ∫ a in (Ioi t)ᶜ, 0 := by
+    apply integral_congr_ae
+    rw [EventuallyEq, ae_restrict_iff' (measurableSet_Ioi (a := t)).compl]
+    have h_ae : ∀ᵐ x ∂volume.restrict (Iic t), x < t := by
+      have h_le : ∀ᵐ x ∂(volume.restrict (Iic t)), x ≤ t :=
+    ae_restrict_mem (measurableSet_Iic)
+      have h_ne : ∀ᵐ x ∂(volume.restrict (Iic t)), x ≠ t := by
+        refine ae_restrict_of_ae ?_
+        simp [ae_iff, MeasureTheory.NoAtoms.measure_singleton]
+      filter_upwards [h_le, h_ne] with x hx_le hx_ne
+      exact lt_of_le_of_ne hx_le hx_ne
+    rw [Set.compl_Ioi]
+    rw [ae_restrict_iff' measurableSet_Iic] at h_ae
+    filter_upwards [h_ae] with x hx_lt
+    intro hx
+    unfold HeavisidePerso
+    have hx_lt_t:  x-t<0:= by
+      have hx_lt_t_bis:= hx_lt hx
+      linarith
+    simp[hx_lt_t.not_gt, hx_lt_t.ne, if_neg]
+
+  have h_sum : ∫ (a : ℝ), f a * HeavisidePerso (a - t) = ∫ (a : ℝ) in Ioi t, f a := by
+    rw [← integral_add_compl (measurableSet_Ioi : MeasurableSet (Set.Ioi t))]
+    rw [h_pos, h_neg]
+    simp
+    have h_le : ∀ a, ‖f a * HeavisidePerso (a - t)‖ ≤ ‖f a‖ := by
+      intro a
+      rw [norm_mul]
+      refine mul_le_of_le_one_right (norm_nonneg (f a)) ?_
+      exact HeavisideNorm_le_one (a-t)
+    have h_meas : AEStronglyMeasurable (fun a ↦ f a * HeavisidePerso (a - t)) volume := by
+      apply AEStronglyMeasurable.mul
+      · exact hf.1
+      · apply AEMeasurable.aestronglyMeasurable
+        apply Measurable.aemeasurable
+        unfold HeavisidePerso
+        apply Measurable.ite
+        · have : {a | a - t > 0} = Set.Ioi t := by
+            ext a
+            simp [sub_pos]
+          rw [this]
+          exact measurableSet_Ioi
+        · exact measurable_const
+        · apply Measurable.ite
+          · have : {a | a - t = 0} = {t} := by
+              ext a
+              simp [sub_eq_zero]
+            rw [this]
+            exact measurableSet_singleton t
+          · exact measurable_const
+          · exact measurable_const
+    exact Integrable.mono hf h_meas (Eventually.of_forall h_le)
+  rw[h_sum]
+
+
+theorem Tendsto_Integral_DirichletSin_times_integrableFunction' (f:ℝ → ℂ ) (t: ℝ ) (hf: Integrable (fun t ↦ f t )):
+ Tendsto (fun T : ℝ ↦ ∫ a, f a * ↑(DirichletSin (T * (a - t))))
+    atTop (𝓝 (∫ a in Ioi t, f a)):= by
+  rcases DirichletSinBoundedComp_forall t with ⟨C, hC_uniform⟩
+  let g := fun a ↦ ‖f a‖ * |C|
+  have h_int_g : Integrable g := hf.norm.mul_const |C|
+
+  have h_dominated : ∀ T, ∀ᵐ a, ‖f a * DirichletSin (T * (a - t))‖ ≤ g a := by
+    intro T
+    apply Eventually.of_forall
+    intro a
+    rw [norm_mul]
+    have: ‖↑(DirichletSin (T * (a - t)):ℂ)‖ ≤ C:= by
+      simp_rw[Complex.norm_real]
+      simp_rw [Real.norm_eq_abs]
+      exact hC_uniform T a
+    refine mul_le_mul_of_nonneg_left (le_trans this (le_abs_self C)) (norm_nonneg _)
+
+  let f_limit := fun a ↦ f a * ↑(HeavisidePerso (a - t))
+  have h_pointwise : ∀ᵐ a, Tendsto (fun T ↦ f a *↑(DirichletSin (T * (a - t)):ℂ)) atTop (𝓝 (f_limit a)) := by
+    apply Eventually.of_forall
+    intro a
+    have lim_complex : Tendsto (fun R ↦ (↑(DirichletSin (R * (a - t))):ℂ) ) atTop (𝓝 (↑(HeavisidePerso (a - t)):ℂ)) := by
+      let i := fun (x : ℝ) ↦ (x : ℂ)
+      have h_cont : Continuous i := continuous_algebraMap ℝ ℂ
+      have h_rew : (fun R ↦ ↑(DirichletSin (R * (a - t)))) = i ∘ (fun R ↦ DirichletSin (R * (a - t))):= by
+        ext R
+        unfold i
+        simp only [Function.comp_apply]
+      rw [h_rew]
+      have h_point : i (HeavisidePerso (a - t)) = ↑(HeavisidePerso (a - t)) := rfl
+      rw [← h_point]
+      apply Tendsto.comp
+      · exact h_cont.tendsto (HeavisidePerso (a - t))
+      · exact lim_S_Rx (a - t)
+    unfold f_limit
+    exact Tendsto.const_mul (f a) lim_complex
+
+  have h_conv : Tendsto (fun T ↦ ∫ a, f a * ↑(DirichletSin (T * (a - t)):ℂ)) atTop (𝓝 (∫ a, f_limit a)) := by
+    apply tendsto_integral_filter_of_dominated_convergence g
+    · filter_upwards [eventually_ge_atTop 0] with T hT
+      exact (Integrable_DirichletSin_times_integrableFunction' f T t hT hf).aestronglyMeasurable
+    · apply Eventually.of_forall
+      exact h_dominated
+    · exact h_int_g
+    ·exact h_pointwise
+  unfold f_limit at h_conv
+  convert h_conv using 1
+  have h_pos : ∫ a in Ioi t, f a * HeavisidePerso (a - t) = ∫ a in Ioi t, f a := by
+    apply integral_congr_ae
+    rw [EventuallyEq, ae_restrict_iff' measurableSet_Ioi]
+    apply Filter.Eventually.of_forall
+    intro x hx
+    rw [Set.mem_Ioi] at hx
+    have hx_gt_t: x-t>0:= sub_pos_of_lt hx
+    unfold HeavisidePerso
+    simp[hx_gt_t]
+  have h_neg : ∫ a in (Ioi t)ᶜ, f a * HeavisidePerso (a - t) = ∫ a in (Ioi t)ᶜ, 0 := by
+    apply integral_congr_ae
+    rw [EventuallyEq, ae_restrict_iff' (measurableSet_Ioi (a := t)).compl]
+    have h_ae : ∀ᵐ x ∂volume.restrict (Iic t), x < t := by
+      have h_le : ∀ᵐ x ∂(volume.restrict (Iic t)), x ≤ t :=
+    ae_restrict_mem (measurableSet_Iic)
+      have h_ne : ∀ᵐ x ∂(volume.restrict (Iic t)), x ≠ t := by
+        refine ae_restrict_of_ae ?_
+        simp [ae_iff, MeasureTheory.NoAtoms.measure_singleton]
+      filter_upwards [h_le, h_ne] with x hx_le hx_ne
+      exact lt_of_le_of_ne hx_le hx_ne
+    rw [Set.compl_Ioi]
+    rw [ae_restrict_iff' measurableSet_Iic] at h_ae
+    filter_upwards [h_ae] with x hx_lt
+    intro hx
+    unfold HeavisidePerso
+    have hx_lt_t:  x-t<0:= by
+      have hx_lt_t_bis:= hx_lt hx
+      linarith
+    simp[hx_lt_t.not_gt, hx_lt_t.ne, if_neg]
+
+  have h_sum : ∫ (a : ℝ), f a * HeavisidePerso (a - t) = ∫ (a : ℝ) in Ioi t, f a := by
+    rw [← integral_add_compl (measurableSet_Ioi : MeasurableSet (Set.Ioi t))]
+    rw [h_pos, h_neg]
+    simp
+    have h_le : ∀ a, ‖f a * HeavisidePerso (a - t)‖ ≤ ‖f a‖ := by
+      intro a
+      rw [norm_mul]
+      refine mul_le_of_le_one_right (norm_nonneg (f a)) ?_
+      simp_rw[Complex.norm_real]
+      exact HeavisideNorm_le_one (a-t)
+    have h_meas : AEStronglyMeasurable (fun a ↦ f a * HeavisidePerso (a - t)) volume := by
+      apply AEStronglyMeasurable.mul
+      · exact hf.1
+      · apply AEMeasurable.aestronglyMeasurable
+        apply Measurable.aemeasurable
+        unfold HeavisidePerso
+        refine continuous_algebraMap ℝ ℂ |>.measurable.comp ?_
+        apply Measurable.ite
+        · have : {a | a - t > 0} = Set.Ioi t := by
+            ext a
+            simp [sub_pos]
+          rw [this]
+          exact measurableSet_Ioi
+        · exact measurable_const
+        · apply Measurable.ite
+          · have : {a | a - t = 0} = {t} := by
+              ext a
+              simp [sub_eq_zero]
+            rw [this]
+            exact measurableSet_singleton t
+          · exact measurable_const
+          · exact measurable_const
+    exact Integrable.mono hf h_meas (Eventually.of_forall h_le)
+  rw[h_sum]
+
+theorem Tendsto_Integral_DirichletSin_times_integrableFunction_zero' (f:ℝ → ℂ ) (t: ℝ ) (hf: Integrable (fun t ↦ f t )):
+ Tendsto (fun T : ℝ ↦ ∫ a in Ioi 0, f a * ↑(DirichletSin (T * (a - t))))
+    atTop (𝓝 (∫ a in Ioi (max 0 t), f a)):= by
+  rcases DirichletSinBoundedComp_forall t with ⟨C, hC_uniform⟩
+  let g := fun a ↦ ‖f a‖ * |C|
+  have h_int_g : Integrable g := hf.norm.mul_const |C|
+
+  have h_dominated : ∀ T, ∀ᵐ a, ‖f a * DirichletSin (T * (a - t))‖ ≤ g a := by
+    intro T
+    apply Eventually.of_forall
+    intro a
+    rw [norm_mul]
+    have: ‖↑(DirichletSin (T * (a - t)):ℂ)‖ ≤ C:= by
+      simp_rw[Complex.norm_real]
+      simp_rw [Real.norm_eq_abs]
+      exact hC_uniform T a
+    refine mul_le_mul_of_nonneg_left (le_trans this (le_abs_self C)) (norm_nonneg _)
+
+  let f_limit := fun a ↦ f a * ↑(HeavisidePerso (a - t))
+  have h_pointwise : ∀ᵐ a, Tendsto (fun T ↦ f a *↑(DirichletSin (T * (a - t)):ℂ)) atTop (𝓝 (f_limit a)) := by
+    apply Eventually.of_forall
+    intro a
+    have lim_complex : Tendsto (fun R ↦ (↑(DirichletSin (R * (a - t))):ℂ) ) atTop (𝓝 (↑(HeavisidePerso (a - t)):ℂ)) := by
+      let i := fun (x : ℝ) ↦ (x : ℂ)
+      have h_cont : Continuous i := continuous_algebraMap ℝ ℂ
+      have h_rew : (fun R ↦ ↑(DirichletSin (R * (a - t)))) = i ∘ (fun R ↦ DirichletSin (R * (a - t))):= by
+        ext R
+        unfold i
+        simp only [Function.comp_apply]
+      rw [h_rew]
+      have h_point : i (HeavisidePerso (a - t)) = ↑(HeavisidePerso (a - t)) := rfl
+      rw [← h_point]
+      apply Tendsto.comp
+      · exact h_cont.tendsto (HeavisidePerso (a - t))
+      · exact lim_S_Rx (a - t)
+    unfold f_limit
+    exact Tendsto.const_mul (f a) lim_complex
+
+  have h_conv : Tendsto (fun T ↦ ∫ a in Ioi 0, f a * ↑(DirichletSin (T * (a - t)):ℂ)) atTop (𝓝 (∫ a in Ioi 0, f_limit a)) := by
+    apply tendsto_integral_filter_of_dominated_convergence g
+    · filter_upwards [eventually_ge_atTop 0] with T hT
+      exact (Integrable_DirichletSin_times_integrableFunction' f T t hT hf).aestronglyMeasurable.restrict
+    · apply Eventually.of_forall
+      intro T
+      apply ae_restrict_of_ae
+      exact h_dominated T
+    · exact h_int_g.restrict
+    ·exact ae_restrict_of_ae h_pointwise
+  unfold f_limit at h_conv
+  convert h_conv using 1
+  by_cases ht : 0 ≤ t
+  have h_pos : ∫ a in Ioi t, f a * HeavisidePerso (a - t) = ∫ a in Ioi t, f a := by
+    apply integral_congr_ae
+    rw [EventuallyEq, ae_restrict_iff' measurableSet_Ioi]
+    apply Filter.Eventually.of_forall
+    intro x hx
+    rw [Set.mem_Ioi] at hx
+    have hx_gt_t: x-t>0:= sub_pos_of_lt hx
+    unfold HeavisidePerso
+    simp[hx_gt_t]
+  have h_neg : ∫ a in Ioi 0 ∩ Iic t, f a * HeavisidePerso (a - t) = ∫ a in Ioi 0 ∩ Iic t, 0 := by
+    apply integral_congr_ae
+    rw [EventuallyEq, ae_restrict_iff' (measurableSet_Ioi.inter measurableSet_Iic)]
+    have h_mem : ∀ᵐ x ∂volume.restrict (Ioi 0 ∩ Iic t), x ∈ Ioi 0 ∩ Iic t :=
+      ae_restrict_mem (measurableSet_Ioi.inter measurableSet_Iic)
+
+    have h_ae : ∀ᵐ x ∂volume.restrict (Ioi 0 ∩ Iic t), x < t := by
+      have h_ne : ∀ᵐ x ∂volume.restrict (Ioi 0 ∩ Iic t), x ≠ t := by
+        refine ae_restrict_of_ae ?_
+        simp [ae_iff, MeasureTheory.NoAtoms.measure_singleton]
+      filter_upwards [h_mem, h_ne] with x hx_mem hx_ne
+      exact lt_of_le_of_ne hx_mem.2 hx_ne
+
+    rw [ae_restrict_iff' (measurableSet_Ioi.inter measurableSet_Iic)] at h_ae
+    filter_upwards [h_ae] with x hx_lt
+    intro hx
+    unfold HeavisidePerso
+    have hx_lt_t:  x-t<0:= by
+      have hx_lt_t_bis:= hx_lt hx
+      linarith
+    simp[hx_lt_t.not_gt, hx_lt_t.ne, if_neg]
+  have h_max : max 0 t = t := max_eq_right ht
+  rw [h_max]
+  have h_union : Ioi 0 = (Ioi 0 ∩ Iic t) ∪ Ioi t := by
+        ext x
+        simp only [Set.mem_Ioi, Set.mem_union, Set.mem_inter_iff, Set.mem_Iic]
+        constructor
+        · intro hx; cases le_or_gt x t with | inl h => left; exact ⟨hx, h⟩ | inr h => right; exact h
+        · intro hx; cases hx with | inl h => exact h.1 | inr h => linarith [ht]
+  rw [h_union, MeasureTheory.setIntegral_union]
+  · rw [h_neg, h_pos]
+    simp
+  · rw [Set.disjoint_iff_inter_eq_empty]
+    ext x
+    simp
+  · exact measurableSet_Ioi
+  · have h_le : ∀ a, ‖f a * HeavisidePerso (a - t)‖ ≤ ‖f a‖ := by
+      intro a
+      rw [norm_mul]
+      refine mul_le_of_le_one_right (norm_nonneg (f a)) ?_
+      simp_rw[Complex.norm_real]
+      exact HeavisideNorm_le_one (a-t)
+    have h_meas : AEStronglyMeasurable (fun a ↦ f a * HeavisidePerso (a - t)) volume := by
+      apply AEStronglyMeasurable.mul
+      · exact hf.1
+      · apply AEMeasurable.aestronglyMeasurable
+        apply Measurable.aemeasurable
+        unfold HeavisidePerso
+        refine continuous_algebraMap ℝ ℂ |>.measurable.comp ?_
+        apply Measurable.ite
+        · have : {a | a - t > 0} = Set.Ioi t := by
+            ext a
+            simp [sub_pos]
+          rw [this]
+          exact measurableSet_Ioi
+        · exact measurable_const
+        · apply Measurable.ite
+          · have : {a | a - t = 0} = {t} := by
+              ext a
+              simp [sub_eq_zero]
+            rw [this]
+            exact measurableSet_singleton t
+          · exact measurable_const
+          · exact measurable_const
+
+    have:=Integrable.mono hf h_meas (Eventually.of_forall h_le)
+    exact this.integrableOn
+  · have h_le : ∀ a, ‖f a * HeavisidePerso (a - t)‖ ≤ ‖f a‖ := by
+      intro a
+      rw [norm_mul]
+      refine mul_le_of_le_one_right (norm_nonneg (f a)) ?_
+      simp_rw[Complex.norm_real]
+      exact HeavisideNorm_le_one (a-t)
+    have h_meas : AEStronglyMeasurable (fun a ↦ f a * HeavisidePerso (a - t)) volume := by
+      apply AEStronglyMeasurable.mul
+      · exact hf.1
+      · apply AEMeasurable.aestronglyMeasurable
+        apply Measurable.aemeasurable
+        unfold HeavisidePerso
+        refine continuous_algebraMap ℝ ℂ |>.measurable.comp ?_
+        apply Measurable.ite
+        · have : {a | a - t > 0} = Set.Ioi t := by
+            ext a
+            simp [sub_pos]
+          rw [this]
+          exact measurableSet_Ioi
+        · exact measurable_const
+        · apply Measurable.ite
+          · have : {a | a - t = 0} = {t} := by
+              ext a
+              simp [sub_eq_zero]
+            rw [this]
+            exact measurableSet_singleton t
+          · exact measurable_const
+          · exact measurable_const
+    have:=Integrable.mono hf h_meas (Eventually.of_forall h_le)
+    exact this.integrableOn
+
+  have ht_lt : t < 0 := lt_of_not_ge ht
+  have h_max : max 0 t = 0 := max_eq_left (le_of_lt ht_lt)
+  rw [h_max]
+  congr 1
+  apply integral_congr_ae
+  rw [EventuallyEq, ae_restrict_iff' measurableSet_Ioi]
+  apply Filter.Eventually.of_forall
+  intro x hx
+  unfold HeavisidePerso
+  have h_pos : x - t > 0 := by
+    simp at hx
+    linarith
+  simp [h_pos]
