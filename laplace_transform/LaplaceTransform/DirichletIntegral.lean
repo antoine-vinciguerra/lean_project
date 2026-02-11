@@ -54,56 +54,47 @@ open scoped Topology
 open Complex
 
 
+noncomputable def DirichletSin : ℝ → ℝ :=
+  fun x↦1/2 + 1/π * ∫ t in  (0).. (x), sinc t
+
+noncomputable def HeavisidePerso (x : ℝ) : ℝ :=
+  if x > 0 then 1 else if x = 0 then 1/2 else 0
 
 
+def sinc_sq_times_exp (t : ℝ) : ℝ → ℝ := fun x ↦ Real.exp (-x * t) * (Real.sinc t)^2
 
-lemma integrable_sinc_sq : IntegrableOn (fun (t:ℝ) => (sinc t)^2) (Ioi 0) := by
-  let s1 : Set ℝ := Ioc 0 1
-  let s2 : Set ℝ := Ioi 1
-  have h_union : Ioi 0 = s1 ∪ s2 := (Ioc_union_Ioi_eq_Ioi (by norm_num)).symm
-  have integrable_s1: IntegrableOn (fun t ↦ sinc t ^ 2) s1 volume:= by
-    rw[← intervalIntegrable_iff_integrableOn_Ioc_of_le ]
-    apply Continuous.intervalIntegrable
-    have h_cont : Continuous (fun t ↦ sinc t ^ 2) := continuous_sinc.pow 2
-    exact h_cont
-    simp
-  have integrable_s2: IntegrableOn (fun t ↦ sinc t ^ 2) s2 volume:= by
-    unfold s2
-    have h_int_inv_sq : IntegrableOn (fun (t:ℝ) => 1 / t^(2:ℝ)) s2 volume := by
-      have : (fun t: ℝ ↦(1:ℝ) / t^(2:ℝ)) = fun t: ℝ ↦ (t^(-2: ℝ)):= by
-        funext t
-        simp
-        rfl
-      simp_rw[this]
-      rw [integrableOn_Ioi_rpow_iff (zero_lt_one : 0 < (1 : ℝ))]
+def neg_sinc_sq_times_id_exp (t : ℝ) : ℝ → ℝ := fun x ↦ -(Real.sinc t)^2  *t* Real.exp (-x * t)
+
+def sin_sq_times_exp (t : ℝ) : ℝ → ℝ := fun x ↦ (Real.sin t)^2 * Real.exp (-x * t)
+
+def integral_sinc_sq_times_exp (x: ℝ) : ℝ  := ∫ t in Ioi 0 , sinc_sq_times_exp t x
+
+def integral_neg_sinc_sq_times_id_exp (x: ℝ) : ℝ  := ∫ t in Ioi 0 , neg_sinc_sq_times_id_exp t x
+
+def integral_sin_sq_times_exp (x: ℝ) : ℝ  := ∫ t in Ioi 0 , sin_sq_times_exp t x
+
+
+lemma integrable_sinc_sq : IntegrableOn (fun (t:ℝ) ↦ (sinc t)^2) (Ioi 0) := by
+  rw [← Ioc_union_Ioi_eq_Ioi (zero_le_one : (0:ℝ) ≤ 1)] -- (0, ∞)= (0, 1] ∪ (1, ∞)
+  apply IntegrableOn.union
+  · -- Case 1: The function is integrable on the bounded interval (0, 1]
+    -- because sinc is continuous everywhere.
+    exact (continuous_sinc.pow 2).integrableOn_Ioc
+  · -- Case 2: Prove integrability on (1, +∞) by comparison with t⁻²
+    have h_int : IntegrableOn (fun t:ℝ ↦ t ^ (-2 : ℝ)) (Ioi 1) := by
+      rw [integrableOn_Ioi_rpow_iff (zero_lt_one : 0 < (1:ℝ))]
       norm_num
-    apply MeasureTheory.Integrable.mono h_int_inv_sq
-    · apply (continuous_sinc.pow 2).continuousOn.aestronglyMeasurable
-      exact measurableSet_Ioi
-    · rw [ae_restrict_iff' measurableSet_Ioi]
-      refine Filter.Eventually.of_forall (fun t ht_mem => ?_)
-      unfold sinc
-      rw [mem_Ioi] at ht_mem
-      simp [(by linarith : t ≠ 0)]
-      have h_pos : 0 < t := by linarith
-      have h_t2_pos : 0 < t^2 := by positivity
-      have h_t2_abs_eq_t2: |t ^ 2|=t^2 := by
-        rw [abs_of_nonneg]
-        exact h_t2_pos.le
-      rw [div_pow, ←abs_pow, ←abs_pow]
-      rw[h_t2_abs_eq_t2]
-      simp
-      field_simp
-      rw [← sq_abs (Real.sin t)]
-      rw[← one_pow 2]
-      simp[pow_le_pow_iff_left ]
-      rw[abs_le]
-      constructor
-      exact Real.neg_one_le_sin t
-      exact Real.sin_le_one t
-  have:= IntegrableOn.union integrable_s1 integrable_s2
-  rw[← h_union] at this
-  exact this
+    refine h_int.mono' ?_ ?_
+    · -- (sinc t)² is measurable
+      exact (continuous_sinc.pow 2).aestronglyMeasurable
+    · -- Prove the point-wise inequality (sinc t)² ≤ t⁻² for t > 1
+      filter_upwards [self_mem_ae_restrict (measurableSet_Ioi)] with t ht
+      have ht₀ : t ≠ 0 := (zero_lt_one.trans (mem_Ioi.mp ht)).ne'
+      simp [sinc, ht₀, div_pow, Real.rpow_neg (zero_lt_one.trans (mem_Ioi.mp ht)).le]
+      field_simp[ht₀]
+      gcongr
+      rw [sq_le_one_iff_abs_le_one]
+      exact abs_sin_le_one t
 
 lemma deriv_sin_sq (t : ℝ) : HasDerivAt (fun x => Real.sin x ^ 2) (Real.sin (2 * t)) t := by
   have h := (Real.hasDerivAt_sin t).pow 2
@@ -121,104 +112,6 @@ lemma deriv_neg_inv {t : ℝ} (ht : t ≠ 0) : HasDerivAt (fun x => -1 / x) (1 /
   rw[neg_inside] at h
   exact h
 
-lemma integral_sinc_sq_eq_dirichlet_bounded {a T : ℝ} (ha : 0 < a) (hT : a ≤ T) :
-    ∫ t in a..T, (Real.sinc t)^2 =
-    ((Real.sinc a)^2 * a -(Real.sinc T)^2   * T) + ∫ t in a..T, Real.sin (2 * t) / t := by
-    unfold sinc
-
-    have h_sinc_eq : ∀ t ∈ Set.uIcc a T, (if t = 0 then 1 else Real.sin t / t) = Real.sin t / t := by
-      intro t ht
-      have : t ≠ 0 := by
-        rw [Set.uIcc_of_le hT] at ht
-        linarith [ha, ht.1]
-      split_ifs with h_cond
-      · contradiction
-      · rfl
-    rw[h_sinc_eq]
-    rw[h_sinc_eq]
-
-    have : ∫ (t : ℝ) in a..T, (if t = 0 then 1 else Real.sin t / t) ^ 2
-     =∫ (t : ℝ) in a..T, ( Real.sin t / t) ^ 2:= by
-      apply intervalIntegral.integral_congr
-      intro t ht
-      have h_val := h_sinc_eq t ht
-      simp [h_val]
-    rw[this]
-
-
-    let u := fun t => Real.sin t ^ 2
-    let v := fun t: ℝ  => -1 / t
-    let u' := fun t => Real.sin (2 * t)
-    let v' := fun t: ℝ  => 1 / t ^ 2
-    have h_left : ∫ t in a..T, (Real.sin t / t )^2 = ∫ t in a..T, u t * v' t := by
-      apply intervalIntegral.integral_congr
-      intro t _
-      field_simp [u, v']
-      ring
-    rw [h_left]
-
-    have h_deriv_u : ∀ x ∈ uIcc a T, HasDerivAt u (u' x) x:= by
-      unfold u u'
-      intro x hx
-      exact deriv_sin_sq x
-    have h_deriv_v : ∀ x ∈ uIcc a T, HasDerivAt v (v' x) x:= by
-      unfold v v'
-      intro x hx
-      rw [uIcc_of_le hT] at hx
-      have hx_neq0 : x ≠ 0 := by
-       exact ne_of_gt (ha.trans_le hx.1)
-      exact deriv_neg_inv hx_neq0
-    have hu'_integrable : IntervalIntegrable u' volume a T:= by
-      unfold u'
-      apply ContinuousOn.intervalIntegrable
-      fun_prop
-    have hv'_integrable :IntervalIntegrable v' volume a T:= by
-      unfold v'
-      apply ContinuousOn.intervalIntegrable
-      have : ∀ x ∈ Icc a T, x ^ 2 ≠ 0:= by
-        intro x hx
-        have hx_neq0 : x ≠ 0 := by
-          exact ne_of_gt (ha.trans_le hx.1)
-        exact pow_ne_zero 2 hx_neq0
-      apply ContinuousOn.div
-      fun_prop
-      fun_prop
-      rw [uIcc_of_le hT]
-      exact this
-
-
-    rw [intervalIntegral.integral_mul_deriv_eq_deriv_mul h_deriv_u h_deriv_v hu'_integrable hv'_integrable]
-    unfold u v u'
-    field_simp
-    simp
-    ring
-    simp
-    simp
-
-lemma sinc_bounded_change_interval{a T : ℝ} (ha : 0 < a) (hT : a ≤ T) : (∫ t in a..T, Real.sin (2 * t) / t)= ∫ t in (2*a).. (2*T), Real.sinc t := by
-  let f:= fun t ↦ Real.sin (t) / (t)
-
-  have : (∫ t in a..T, Real.sin (2 * t) / t)= 2*(∫ t in a..T, f (2 * t)):= by
-    unfold f
-    rw[← intervalIntegral.integral_const_mul]
-    congr
-    funext t
-    field_simp
-  rw[this]
-  rw [intervalIntegral.integral_comp_mul_left]
-  simp
-  unfold f
-  apply intervalIntegral.integral_congr
-  intro t ht
-  simp
-  have h2T: 2*a ≤ 2*T := by linarith
-  have h : t ≠ 0 := by
-    rw [Set.uIcc_of_le h2T] at ht
-    linarith [ha, ht.1]
-  unfold sinc
-  simp[h]
-  simp
-
 lemma limit_sinc_sq_mul_self_zero :
     Tendsto (fun a => (Real.sinc a)^2 * a) (nhdsWithin 0 (Set.Ioi 0)) (nhds 0) := by
   have h_cont : ContinuousAt (fun a => (Real.sinc a)^2 * a) 0 := by
@@ -231,20 +124,28 @@ lemma limit_sinc_sq_mul_self_zero :
     · simp
       exact nhdsWithin_le_nhds
   exact h_lim
+
 lemma limit_sinc_sq_mul_self_atTop :
     Tendsto (fun T => (Real.sinc T)^2 * T) atTop (nhds 0) := by
+    -- For T > 0, we can rewrite (sinc T)^2 * T by expanding the definition of sinc
     have h_eq : ∀ᶠ T in atTop, (Real.sinc T)^2 * T = (Real.sin T)^2 / T := by
       filter_upwards [eventually_gt_atTop 0] with T hT
       unfold Real.sinc
       simp [hT.ne.symm]
       field_simp
+    -- Replace the original limit goal with the simplified expression (sin T)^2 / T
     rw [tendsto_congr' h_eq]
+    -- Use the Sandwich Theorem: 0 ≤ (sin T)^2 / T ≤ 1/T
     apply tendsto_of_tendsto_of_tendsto_of_le_of_le'
-    · exact tendsto_const_nhds
-    · exact tendsto_inv_atTop_zero
-    · filter_upwards [eventually_gt_atTop 0] with x hx
+    · -- Lower bound limit: 0 → 0
+      exact tendsto_const_nhds
+    · -- Upper bound limit: 1/T → 0 as T → ∞
+      exact tendsto_inv_atTop_zero
+    · -- Proof of lower bound: (sin T)^2 / T is non-negative for T > 0
+      filter_upwards [eventually_gt_atTop 0] with x hx
       positivity
-    · filter_upwards [eventually_gt_atTop 0] with x hx
+    · -- Proof of upper bound: (sin T)^2 / T ≤ 1/T for T > 0
+      filter_upwards [eventually_gt_atTop 0] with x hx
       field_simp
       rw [← sq_abs (Real.sin x)]
       rw[← one_pow 2]
@@ -254,502 +155,305 @@ lemma limit_sinc_sq_mul_self_atTop :
       exact Real.neg_one_le_sin x
       exact Real.sin_le_one x
 
-lemma limit_sinc_zero (T:ℝ) (hT: T>0): Tendsto (fun (a : ℝ) ↦ ∫ t in a..T, Real.sinc t) (𝓝[>] 0) (𝓝 (∫ t in 0..T, Real.sinc t)) := by
-  let I := Set.uIcc (0:ℝ) (T:ℝ)
-  have h_int : IntegrableOn Real.sinc I :=
+lemma limit_sinc_zero (T : ℝ) (hT : T > 0) :
+    Tendsto (fun (a : ℝ) ↦ ∫ t in a..T, Real.sinc t) (𝓝[>] 0) (𝓝 (∫ t in 0..T, Real.sinc t)) := by
+  have h_int : IntegrableOn Real.sinc (Set.uIcc 0 T) :=
     Real.continuous_sinc.integrableOn_Icc
   have h_cont := intervalIntegral.continuousOn_primitive_interval_left h_int
-  have h_integral: Tendsto (fun (a : ℝ) ↦ ∫ t in a..T, Real.sinc t) (𝓝[>] 0) (𝓝 (∫ t in 0..T, Real.sinc t)) := by
-    apply (h_cont 0 (by simp [I])).mono_left
-    have h_eventually_lt_T : ∀ᶠ x in 𝓝[>] (0 : ℝ), x < T:= eventually_nhdsWithin_of_eventually_nhds (Iio_mem_nhds hT)
-    rw [nhdsWithin_le_iff]
-    filter_upwards [self_mem_nhdsWithin, h_eventually_lt_T] with x hx_pos hx_lt_T
-    rw [Set.mem_Ioi] at hx_pos
-    have x_min: min 0 T ≤  x:= by
-      have h_min : min 0 T= 0 := min_eq_left (le_of_lt hT)
-      linarith
-    have x_max: max 0 T ≥  x:= by
-      have h_min : max 0 T= T := max_eq_right (le_of_lt hT)
-      linarith
-    exact ⟨x_min, x_max⟩
-  exact h_integral
+  apply (h_cont 0 (by simp [hT.le])).tendsto.mono_left
+  rw [nhdsWithin_le_iff]
+  rw [uIcc_of_le hT.le]
+  filter_upwards [self_mem_nhdsWithin, mem_nhdsWithin_of_mem_nhds (Iio_mem_nhds hT)] with x hx_pos hx_lt
+  exact ⟨hx_pos.le, hx_lt.le⟩
 
+lemma limit_sincsq_zero (T : ℝ) (hT : T > 0) :
+    Tendsto (fun (a : ℝ) ↦ ∫ t in a/2..T/2, (Real.sinc t)^2) (𝓝[>] 0) (𝓝 (∫ t in 0..T/2, (Real.sinc t)^2)) := by
+  have hT2 : 0 < T / 2 := by linarith
+  have h_int : IntegrableOn (fun t ↦ (Real.sinc t)^2) (uIcc 0 (T/2)) :=
+    (Real.continuous_sinc.pow 2).integrableOn_Icc
+  apply (intervalIntegral.continuousOn_primitive_interval_left h_int 0 left_mem_uIcc).tendsto.comp
+  rw [tendsto_nhdsWithin_iff, uIcc_of_le hT2.le]
+  constructor
+  · convert (tendsto_id.div_const (2 : ℝ)).mono_left nhdsWithin_le_nhds
+    simp
+  · filter_upwards [self_mem_nhdsWithin, mem_nhdsWithin_of_mem_nhds (Iio_mem_nhds hT)] with x hx_pos hx_lt
+    simp at hx_pos hx_lt
+    exact ⟨by linarith, by linarith⟩
 
-lemma limit_sincsq_zero (T:ℝ) (hT: T>0): Tendsto (fun (a : ℝ) ↦ ∫ t in a/2..T/2, (Real.sinc t)^2) (𝓝[>] 0) (𝓝 (∫ t in 0..T/2, (Real.sinc t)^2)) := by
-  have hT2: T/2>0:= by
-    linarith
-  let I := Set.uIcc (0:ℝ) (T/2:ℝ)
-  let f:= fun t↦ (Real.sinc t)^2
-  have h_int : IntegrableOn f I := by
-    have h_cont_f : Continuous f := by
-      exact Real.continuous_sinc.pow 2
-    apply h_cont_f.integrableOn_Icc
-
-  have h_cont := intervalIntegral.continuousOn_primitive_interval_left h_int
-  have h_integral: Tendsto (fun (a : ℝ) ↦ ∫ t in a..T/2, (Real.sinc t)^2) (𝓝[>] 0) (𝓝 (∫ t in 0..T/2, (Real.sinc t)^2)) := by
-    apply (h_cont 0 (by simp [I])).mono_left
-    have h_eventually_lt_T : ∀ᶠ x in 𝓝[>] (0 : ℝ), x < T/2:= eventually_nhdsWithin_of_eventually_nhds (Iio_mem_nhds hT2)
-    rw [nhdsWithin_le_iff]
-    filter_upwards [self_mem_nhdsWithin, h_eventually_lt_T] with x hx_pos hx_lt_T
-    rw [Set.mem_Ioi] at hx_pos
-    have x_min: min 0 (T/2) ≤  x:= by
-      have h_min : min 0 (T/2)= 0 := min_eq_left (le_of_lt hT2)
-      linarith
-    have x_max: max 0 (T/2) ≥  x:= by
-      have h_min : max 0 (T/2)= T/2 :=     max_eq_right (le_of_lt hT2)
-      linarith
-    exact ⟨x_min, x_max⟩
-
-
-
-  have h_lim_inner : Tendsto (fun (a:ℝ) ↦ a / 2) (𝓝[>] 0) (𝓝[>] 0) := by
-    apply tendsto_nhdsWithin_iff.mpr
-    constructor
-    · have h := (tendsto_id (x := 𝓝 0)).div_const (2 : ℝ)
-      simp at h
-      exact h.mono_left nhdsWithin_le_nhds
-    · filter_upwards [self_mem_nhdsWithin (s := Ioi 0)] with a ha
-      simp at ha
-      simp
-      exact ha
-  have h_final := h_integral.comp h_lim_inner
-  exact h_final
-
-
-
-lemma integral_sinc_sq_eq_dirichlet_bounded' {a T : ℝ} (ha : 0 < a) (hT : a ≤ T) :
-   (∫ t in a.. T, Real.sinc t)= (∫ t in a/2..T/2, (Real.sinc t)^2) -(Real.sinc (a/2))^2 * (a/2) +(Real.sinc (T/2))^2*(T/2):= by
-  have h_a_div_2: 0 < a/2:= by linarith
-  have h_T_div_2: a/2 ≤ T/2:= by linarith
-  have h := sinc_bounded_change_interval h_a_div_2 h_T_div_2
-  field_simp at h
-  rw[← h]
-  have h_new :=
-  integral_sinc_sq_eq_dirichlet_bounded h_a_div_2 h_T_div_2
-
-
-  let f:=  sinc (a / 2) ^ 2 * (a / 2) - sinc (T / 2) ^ 2 * (T / 2)
-  let g:=   ∫ (t : ℝ) in a / 2..T / 2, Real.sin (2 * t) / t
-  have: sinc (a / 2) ^ 2 * (a / 2) - sinc (T / 2) ^ 2 * (T / 2) + ∫ (t : ℝ) in a / 2..T / 2, Real.sin (2 * t) / t= f+g:= by
-    unfold f g
+lemma integral_sinc_sq_eq_dirichlet_bounded {a T : ℝ} (ha : 0 < a) (hT : a ≤ T) :
+    (∫ t in a..T, Real.sinc t) =
+    (∫ t in a/2..T/2, (Real.sinc t)^2) - (Real.sinc (a/2))^2 * (a/2) + (Real.sinc (T/2))^2 * (T/2) := by
+  let a' := a / 2
+  let T' := T / 2
+  have ha' : 0 < a' := by dsimp [a']; linarith
+  have hT' : a' ≤ T' := by dsimp[a', T']; linarith
+  -- Step 1: Use a change of variables (substitution u = 2t)
+  -- to relate ∫ sinc(t) to an integral involving sin(2t)/t
+  have h_change_var : ∫ t in a..T, Real.sinc t = ∫ t in a'..T', Real.sin (2 * t) / t := by
+    have h_sinc2 : ∀ t ∈ uIcc a' T', Real.sin (2 * t) / t = 2 * Real.sinc (2 * t) := by
+      intro t ht; unfold Real.sinc; split_ifs with h0
+      · rw [uIcc_of_le hT'] at ht
+        simp at h0
+        rw [Set.mem_Icc] at ht
+        nlinarith [ha', h0]
+      · field_simp
+    rw [intervalIntegral.integral_congr h_sinc2]
+    rw [intervalIntegral.integral_const_mul]
+    -- Apply the interval version of integration by substitution: ∫ f(ct) dt
+    rw [intervalIntegral.integral_comp_mul_left (fun t ↦ Real.sinc t) (c:=(2 : ℝ))]
+    dsimp [a', T']
     field_simp
-  rw[this] at h_new
-  have h_rewritten : g=(∫ (t : ℝ) in a / 2..T / 2, sinc t ^ 2) - f  := by
-    rw [h_new]
-    ring
+    simp
+  -- Step 2: Use Integration by Parts (IBP) on sinc(t)^2
+  -- We view (sinc t)^2 as (sin t)^2 * (1/t^2)
+  -- We set u = sin(t)^2 (so u' = sin(2t)) and v' = 1/t^2 (so v = -1/t)
+  have h_ibp : ∫ t in a'..T', (Real.sinc t)^2 =
+      (Real.sinc a')^2 * a' - (Real.sinc T')^2 * T' + ∫ t in a'..T', Real.sin (2 * t) / t := by
 
-  unfold f g at h_rewritten
-  rw[h_rewritten]
+    let u := fun t ↦ Real.sin t ^ 2
+    let v := fun t : ℝ ↦ -1 / t
+    let u' := fun t ↦ Real.sin (2 * t)
+    let v' := fun t : ℝ ↦ 1 / t ^ 2
+    -- Boundary term calculation: [u(t)v(t)] from a' to T'
+    have h_boundary : (u T' * v T' - u a' * v a') = - (Real.sinc T')^2 * T' + (Real.sinc a')^2 * a' := by
+      unfold Real.sinc; split_ifs with hT0 ha0
+      · dsimp [T'] at hT0; linarith
+      · dsimp [a'] at ha0; linarith
+      · dsimp [T'] at hT0; linarith
+      · field_simp [ha'.ne', (ha'.trans_le hT').ne']
+        unfold u v
+        field_simp
+        ring_nf
+    -- Prepare the integral for IBP by expanding the definition of sinc
+    have h_prep : ∫ t in a'..T', (Real.sinc t)^2 = ∫ t in a'..T', (Real.sin t)^2 * (1 / t^2) := by
+      apply intervalIntegral.integral_congr
+      intro t ht
+      unfold Real.sinc
+      simp
+      split_ifs with h0
+      · rw [uIcc_of_le hT'] at ht; rw [Set.mem_Icc] at ht; linarith [ha', h0]
+      · field_simp
+    rw [h_prep]
+    -- Apply the Integration by Parts theorem for interval integrals
+    rw[intervalIntegral.integral_mul_deriv_eq_deriv_mul (u := u) (v := v) (u':=u') (v':=v')]
+    · rw [h_boundary]
+      unfold u' v
+      ring_nf
+      rw [intervalIntegral.integral_neg]
+      ring_nf
+    · -- Verify derivative of sin(t)^2 is sin(2t)
+      intro t ht; exact deriv_sin_sq t
+    · -- Verify derivative of -1/t is 1/t^2
+      intro t ht; rw [Set.uIcc_of_le hT'] at ht; apply deriv_neg_inv; linarith [ha', ht.1]
+    · -- Integrability check for the u' * v term
+      apply Continuous.intervalIntegrable; fun_prop
+    · -- Integrability check for the u * v' term
+      apply ContinuousOn.intervalIntegrable; apply ContinuousOn.div; fun_prop; fun_prop;
+      intro x hx; rw [Set.uIcc_of_le hT'] at hx; rw [Set.mem_Icc] at hx; nlinarith [ha', hx.1]
+
+  rw [h_change_var, h_ibp]
   ring
 
+lemma integral_sinc_zero_T (T : ℝ) (hT : T > 0) :
+    (∫ t in 0..T, Real.sinc t) = (∫ t in 0..T/2, (Real.sinc t)^2) + (Real.sinc (T/2))^2 * (T/2) := by
+  -- Step 1: Define the limit of the linear map x ↦ x/2 as x approach 0 from the right
+  have h0 : Tendsto (fun (x:ℝ) ↦ x / 2) (𝓝[>] (0:ℝ)) (𝓝 (0:ℝ)) := by
+    convert (tendsto_id.div_const (2:ℝ)).mono_left nhdsWithin_le_nhds
+    simp
+  -- Step 2: Use the uniqueness of limits to prove the equality
+  -- We show that both sides of the identity are limits of the same expression as a → 0
+  apply tendsto_nhds_unique (limit_sinc_zero T hT)
+  apply Tendsto.congr'
+  · -- Left side: The limit of the integral from a to T is the integral from 0 to T
+    filter_upwards [self_mem_nhdsWithin, mem_nhdsWithin_of_mem_nhds (Iio_mem_nhds hT)]
+    with a ha_pos ha_lt using (integral_sinc_sq_eq_dirichlet_bounded ha_pos ha_lt.le).symm
+  · -- Right side: Evaluate the limit of the boundary terms and the squared integral
+    -- As a → 0, sinc(a/2)² * (a/2) → 1² * 0 = 0
+    convert (limit_sincsq_zero T hT).sub (by
+      simpa using ((continuous_sinc.tendsto 0).comp h0).pow 2 |>.mul h0
+    ) |>.add_const _
+    simp
 
+lemma hasDeriv_sinc_sq_times_exp (t : ℝ) (ht : 0 < t) :
+    ∀ a : ℝ, HasDerivAt (sinc_sq_times_exp t) (neg_sinc_sq_times_id_exp t a) a := by
+  intro a
+  unfold sinc_sq_times_exp neg_sinc_sq_times_id_exp
+  exact ((hasDerivAt_id a).neg.mul_const t).exp.mul_const _ |>.congr_deriv (by simp; ring)
 
-lemma integral_sinc_zero_T (T : ℝ)(hT: T>0) :
-    (∫ t in 0..T, Real.sinc t) = (∫ t in 0..T/2,(Real.sinc t)^2) + (Real.sinc (T/2))^2 * (T/2) := by
+lemma hasDeriv_neg_sinc_sq_times_id_exp (t : ℝ) (ht : 0 < t) :
+    ∀ a : ℝ, HasDerivAt (neg_sinc_sq_times_id_exp t) (sin_sq_times_exp t a) a := by
+  intro a
+  unfold sin_sq_times_exp neg_sinc_sq_times_id_exp
+  convert ((hasDerivAt_id a).neg.mul_const t).exp.mul_const (-(Real.sinc t)^2 * t) using 1
+  · funext x
+    simp;ring
+  · unfold Real.sinc
+    simp [ht.ne'] ; field_simp
 
-  let f := fun a ↦ ∫ t in a..T, Real.sinc t
-
-  let g := fun (a : ℝ) ↦ (∫ t in a/2..T/2, (Real.sinc t)^2) - (Real.sinc (a/2))^2 * (a/2) + (Real.sinc (T/2))^2 * (T/2)
-
-  have hf : Tendsto f (𝓝[>] 0) (𝓝 ((∫ t in 0..T, Real.sinc t) )) := limit_sinc_zero T hT
-
-  have hg : Tendsto g (𝓝[>] 0) (𝓝 ((∫ t in 0..T/2, (Real.sinc t)^2) + (Real.sinc (T/2))^2 * (T/2))) := by
-    apply Tendsto.add
-    apply Tendsto.sub
-    · have hflim:= limit_sincsq_zero T hT
-      rw [intervalIntegral.integral_of_le] at hflim
-      exact hflim
-      linarith
-    · have h_empty : ∫ (x : ℝ) in Ioc (T / 2) 0, sinc x ^ 2 = 0 := by
-        have h_range : Ioc (T / 2) 0 = ∅ := by
-          apply Set.Ioc_eq_empty
-          linarith [hT]
-        rw [h_range,MeasureTheory.setIntegral_empty]
-      rw[h_empty]
-      have:= limit_sinc_sq_mul_self_zero
-      have h_lim_inner : Tendsto (fun (a:ℝ) ↦ a / 2) (𝓝[>] 0) (𝓝[>] 0) := by
-        apply tendsto_nhdsWithin_iff.mpr
-        constructor
-        · have h := (tendsto_id (x := 𝓝 0)).div_const (2 : ℝ)
-          simp at h
-          exact h.mono_left nhdsWithin_le_nhds
-        · filter_upwards [self_mem_nhdsWithin (s := Ioi 0)] with a ha
-          simp at ha
-          simp
-          exact ha
-      have h_final := this.comp h_lim_inner
-      exact h_final
-    · exact tendsto_const_nhds
-  have h_eq : ∀ᶠ a in 𝓝[>] 0, f a = g a := by
-    have h_mem : Set.Iic T ∈ 𝓝[>] 0 := by
-      apply mem_nhdsWithin_of_mem_nhds
-      exact Iic_mem_nhds hT
-    filter_upwards [self_mem_nhdsWithin, h_mem] with a ha_pos ha_T
-    unfold f g
-    exact integral_sinc_sq_eq_dirichlet_bounded' ha_pos ha_T
-  have hf_lim_from_g : Tendsto f (𝓝[>] 0) (𝓝 ((∫ (t : ℝ) in 0..T / 2, sinc t ^ 2) + sinc (T / 2) ^ 2 * (T / 2))) := by
-    refine (tendsto_congr' ?_).mp hg
-    filter_upwards [h_eq] with x hx
-    exact hx.symm
-
-  exact tendsto_nhds_unique hf hf_lim_from_g
-
-
-def sinc_sq_times_exp (t : ℝ) : ℝ → ℝ := fun x ↦ Real.exp (-x * t) * (Real.sinc t)^2
-
-def neg_sinc_sq_times_id_exp (t : ℝ) : ℝ → ℝ := fun x ↦ -(Real.sinc t)^2  *t* Real.exp (-x * t)
-
-def sin_sq_times_exp (t : ℝ) : ℝ → ℝ := fun x ↦ (Real.sin t)^2 * Real.exp (-x * t)
-
-def integral_sinc_sq_times_exp (x: ℝ) : ℝ  := ∫ t in Ioi 0 , sinc_sq_times_exp t x
-
-def integral_neg_sinc_sq_times_id_exp (x: ℝ) : ℝ  := ∫ t in Ioi 0 , neg_sinc_sq_times_id_exp t x
-
-def integral_sin_sq_times_exp(x: ℝ) : ℝ  := ∫ t in Ioi 0 , sin_sq_times_exp t x
-
-
-lemma hasDeriv_sinc_sq_times_exp(t : ℝ) (ht : 0 < t):
-  ∀a: ℝ ,HasDerivAt (sinc_sq_times_exp t) (neg_sinc_sq_times_id_exp t a) a:= by
-    unfold sinc_sq_times_exp
-    unfold neg_sinc_sq_times_id_exp
-    intro a
-    have h_inner : HasDerivAt (fun x => -x * t) (-t) a := by
-      simpa using hasDerivAt_id a |>.neg |>.mul_const t
-
-    have h_exp : HasDerivAt (fun x => Real.exp (-x * t)) (-t * Real.exp (-a * t)) a := by
-      convert h_inner.exp using 1
-      ring
-
-    convert h_exp.mul_const ((Real.sinc t)^2) using 1
-    unfold sinc
-    split_ifs with h_zero
-    · linarith
-    · field_simp
-
-lemma hasDeriv_neg_sinc_sq_times_id_exp(t : ℝ) (ht : 0 < t):
-  ∀a: ℝ ,HasDerivAt (neg_sinc_sq_times_id_exp t) (sin_sq_times_exp t a) a:= by
-    unfold sin_sq_times_exp
-    unfold neg_sinc_sq_times_id_exp
-    intro a
-    have h_inner : HasDerivAt (fun x => -x * t) (-t) a := by
-      simpa using hasDerivAt_id a |>.neg |>.mul_const t
-
-    have h_exp : HasDerivAt (fun x => Real.exp (-x * t)) (-t * Real.exp (-a * t)) a := by
-      convert h_inner.exp using 1
-      ring
-
-    convert h_exp.mul_const (-(Real.sinc t)^2*t) using 1
-    unfold sinc
-    split_ifs with h_zero
-    · linarith
-    · field_simp
-    unfold sinc
-    have: t≠ 0:= by linarith
-    simp[this]
-    field_simp
-
-lemma neg_sinc_sq_times_id_exp_le_exp (t: ℝ):
-  ∀ x, ‖neg_sinc_sq_times_id_exp t x‖ ≤ Real.exp (-x * t):= by
+lemma neg_sinc_sq_times_id_exp_le_exp (t : ℝ) :
+    ∀ x, ‖neg_sinc_sq_times_id_exp t x‖ ≤ Real.exp (-x * t) := by
   intro x
   unfold neg_sinc_sq_times_id_exp
-  rw [norm_mul]
-  have:  ‖rexp (-x * t)‖= rexp (-x * t):= by
-    simp
-  rw[this]
-  apply mul_le_of_le_one_left
-  have h_exp_pos_le:  0 ≤ rexp (-(x * t)):= by
-    have h_exp_pos : 0 < Real.exp (-(x * t)) := Real.exp_pos (-(x * t))
-    simp[h_exp_pos.le]
-  have: rexp (-(x * t))= rexp (-x * t):= by
-    simp
+  rw [norm_mul, norm_mul, Real.norm_eq_abs, Real.norm_eq_abs, Real.norm_eq_abs, Real.abs_exp]
+  apply mul_le_of_le_one_left (Real.exp_pos _).le
+  rw [abs_neg, abs_sq]
 
-  rw[ this] at h_exp_pos_le
+  by_cases h : |t| ≤ (1:ℝ)
+  · have h_sinc_le_one:= (sq_le_one_iff_abs_le_one ( sinc t )).mpr (Real.abs_sinc_le_one t)
+    nlinarith
+  · unfold Real.sinc
+    split_ifs with ht
+    · push_neg at h; simp [ht]
+    · push_neg at h
+      field_simp [ht]
+      rw [←sq_abs (a:= t) ]
+      field_simp
+      have h_sin_le_one:= (sq_le_one_iff_abs_le_one ( Real.sin t )).mpr (Real.abs_sin_le_one t)
+      exact (h_sin_le_one).trans h.le
 
-  exact h_exp_pos_le
-  simp only [norm_neg, norm_eq_abs, norm_mul]
-  by_cases h : |t| ≤ 1
-  · have h_sinc : |Real.sinc t| ≤ 1 := Real.abs_sinc_le_one t
-    have h_sinc2 : |Real.sinc t ^ 2|≤ 1 := by
-      simp
-      exact h_sinc
-    have abs_t_val:= abs_nonneg t
-    calc |Real.sinc t ^ 2| * |t|
-    _ ≤ 1 * |t| := by
-      apply mul_le_mul_of_nonneg_right  h_sinc2 abs_t_val
-    _ ≤ 1  := by simp [h]
-
-
-  · have :t≠ 0:= by
-      intro ht_zero
-      push_neg at h
-      rw [ht_zero, abs_zero] at h
-      have: ¬((1:ℝ)<0) := by linarith
-      exact absurd h this
-    unfold sinc
-    simp[this]
-    rw [div_pow, ← sq_abs (a:= t)]
-    field_simp
-    have h_sin : |Real.sin t| ≤ 1 := Real.abs_sin_le_one t
-    have h_sin2 : Real.sin t ^ 2≤ 1 := by
-      simp
-      exact h_sin
-    push_neg at h
-    exact h_sin2.trans h.le
-
-lemma sin_sq_times_exp_le_exp(t: ℝ):
-   ∀ x, ‖sin_sq_times_exp t x‖ ≤ Real.exp (-x * t):= by
+lemma sin_sq_times_exp_le_exp (t : ℝ) :
+    ∀ x, ‖sin_sq_times_exp t x‖ ≤ Real.exp (-x * t) := by
   intro x
   unfold sin_sq_times_exp
-  rw [norm_mul]
-  have:  ‖rexp (-x * t)‖= rexp (-x * t):= by
-    simp
-  rw[this]
-  apply mul_le_of_le_one_left
-  have h_exp_pos_le:  0 ≤ rexp (-(x * t)):= by
-    have h_exp_pos : 0 < Real.exp (-(x * t)) := Real.exp_pos (-(x * t))
-    simp[h_exp_pos.le]
-  have: rexp (-(x * t))= rexp (-x * t):= by
-    simp
-
-  rw[ this] at h_exp_pos_le
-
-  exact h_exp_pos_le
-  simp
-  simp[Real.abs_sin_le_one]
+  rw [norm_mul, Real.norm_eq_abs, Real.norm_eq_abs, Real.abs_exp,abs_sq]
+  field_simp
+  exact (sq_le_one_iff_abs_le_one ( Real.sin t )).mpr (Real.abs_sin_le_one t)
 
 theorem hasDeriv_integral_sinc_sq_times_exp (x : ℝ) (hx : 0 < x) :
     HasDerivAt (integral_sinc_sq_times_exp) (integral_neg_sinc_sq_times_id_exp x) x := by
-  classical
+  -- Define a local radius r around x to provide a neighborhood for the derivative
+  let r := x / 2
+  have hr : 0 < r := by unfold r; linarith
+  let bound_func := fun t => Real.exp (-r * t)
+  unfold integral_sinc_sq_times_exp integral_neg_sinc_sq_times_id_exp
 
-  have h_deriv :∀ t ∈ Ioi 0,
-      HasDerivAt
-        (fun x => sinc_sq_times_exp t x)
-        (neg_sinc_sq_times_id_exp t x)
-        x :=
-  by
-    intro t ht
-    have ht_gt0 : t > 0 := by
-      apply mem_Ioi.mp ht
-    exact hasDeriv_sinc_sq_times_exp t ht_gt0 x
+  -- Use the dominated convergence theorem for derivatives
+  refine (hasDerivAt_integral_of_dominated_loc_of_deriv_le (μ := volume.restrict (Ioi 0))
+    (x₀ := x) (ε := r) (ε_pos := hr)
+    (F := fun x' t => sinc_sq_times_exp t x')
+    (F' := fun x' t => neg_sinc_sq_times_id_exp t x')
+    (bound := bound_func) ?_ ?_ ?_ ?_ ?_ ?_).2
 
-  have hF_AEmeas : ∀ᶠ x' in nhds x, AEStronglyMeasurable (fun t => sinc_sq_times_exp t x') (volume.restrict (Ioi 0)) := by
-    apply Filter.Eventually.of_forall
+  · -- 1. Prove that the function t ↦ F(x', t) is measurable for any x'
+    apply Eventually.of_forall
     intro x'
     unfold sinc_sq_times_exp
-    apply ContinuousOn.aestronglyMeasurable
-    · apply ContinuousOn.mul
-      apply Continuous.continuousOn
-      have: Continuous (fun x ↦ -x' * x):= by
-        continuity
-      apply Continuous.rexp this
-      apply Continuous.continuousOn
-      exact Real.continuous_sinc.pow 2
-    · exact measurableSet_Ioi
+    dsimp
+    let h_exp := Real.continuous_exp.comp (continuous_mul_left (-x'))
+    let h_sinc := Real.continuous_sinc.pow 2
+    exact (Continuous.mul h_exp h_sinc).aestronglyMeasurable
 
-  have h_int_sinc_sq := integrable_sinc_sq
-
-  have hF_int : Integrable (fun t => sinc_sq_times_exp t x) (volume.restrict (Ioi 0)) :=by
-    apply MeasureTheory.Integrable.mono h_int_sinc_sq
-    · exact hF_AEmeas.self_of_nhds
-    · rw [ae_restrict_iff' measurableSet_Ioi]
-      refine Filter.Eventually.of_forall (fun t ht_mem => ?_)
+  · -- 2. Prove the integrability of the function at the specific point x
+    have h_exp_int : Integrable (fun t ↦ rexp (-x * t)) (volume.restrict (Ioi 0)) := by
+      have h_neg : -x < 0 := by linarith [hx]
+      exact (integrableOn_exp_mul_Ioi h_neg 0).integrable
+    have h_f_meas : AEStronglyMeasurable (fun t ↦ sinc_sq_times_exp t x) (volume.restrict (Ioi 0)) := by
       unfold sinc_sq_times_exp
-      simp only [neg_mul, norm_eq_abs, abs_mul]
-      simp
-      apply mul_le_of_le_one_left (pow_two_nonneg _)
+      let h_exp := Real.continuous_exp.comp (continuous_mul_left (-x))
+      let h_sinc := Real.continuous_sinc.pow 2
+      exact (Continuous.mul h_exp h_sinc).aestronglyMeasurable
+    -- Use the bound sinc²(t) ≤ 1 to show integrability via the exponential function
+    refine h_exp_int.mono h_f_meas ?_
+    filter_upwards [ae_restrict_mem measurableSet_Ioi] with t ht
+    unfold sinc_sq_times_exp; dsimp
+    rw [abs_mul, abs_sq]
+    field_simp
+    exact (sq_le_one_iff_abs_le_one ( sinc t )).mpr (Real.abs_sinc_le_one t)
 
-      have ht_pos : 0 < t := by
-        rw [mem_Ioi] at ht_mem
-        exact ht_mem
+  · -- 3. Prove that the partial derivative F' is measurable
+    exact (((Real.continuous_sinc.pow 2).neg.mul continuous_id).mul
+      (Real.continuous_exp.comp (continuous_mul_left (-x)))).aestronglyMeasurable
 
-      have : rexp (-(x * t))≤ 1:= by
-        simp[ht_pos]
-        exact hx.le
-      exact this
-
-  have hF'_meas : MeasureTheory.AEStronglyMeasurable (fun t => neg_sinc_sq_times_id_exp t x) (volume.restrict (Ioi 0)) := by
-    unfold neg_sinc_sq_times_id_exp
-    apply ContinuousOn.aestronglyMeasurable
-    · apply ContinuousOn.mul
-      apply Continuous.continuousOn
-      apply Continuous.mul
-      apply Continuous.neg
-      exact continuous_sinc.pow 2
-      continuity
-      apply Continuous.continuousOn
-      have: Continuous (fun x' ↦ -x * x'):= by
-        continuity
-      apply Continuous.rexp this
-    · exact measurableSet_Ioi
-
-  let r := x / 2
-  have hr : r > 0 := by
-    unfold r
-    simp[hx]
-
-  let bound_func := fun t => Real.exp (-r * t)
-
-  have h_bound : ∀ᵐ t ∂volume.restrict (Ioi 0), ∀ x' ∈ Metric.ball x r,
-      ‖neg_sinc_sq_times_id_exp t x'‖ ≤ bound_func t := by
-    rw [ae_restrict_iff' measurableSet_Ioi]
-    refine Filter.Eventually.of_forall (fun t ht_mem x' hx' => ?_)
-    have ht_pos : 0 < t := by
-      rw[mem_Ioi] at ht_mem
-      exact ht_mem
-    unfold bound_func
-    have  first_ineq: ‖ neg_sinc_sq_times_id_exp t x'‖≤ rexp (-x' * t) := by
-      exact neg_sinc_sq_times_id_exp_le_exp t x'
-    have second_ineq : rexp (-x' * t) ≤ rexp (-r * t):= by
-      apply Real.exp_le_exp.mpr
-      apply mul_le_mul_of_nonneg_right
-      rw [Metric.mem_ball, Real.dist_eq] at hx'
-      have h_ineg_rx'x :  -r < x' - x := (abs_lt.mp hx').1
-      have: x-r < x':= by
-        linarith [h_ineg_rx'x]
-      have h_r_x_2 : x-r=r := by
-        unfold r
-        ring_nf
-      rw[h_r_x_2] at this
-      have h_res: -x' < -r := by
+  · -- 4. Prove the uniform domination of the derivative in a ball of radius r around x
+    filter_upwards [ae_restrict_mem (measurableSet_Ioi : MeasurableSet (Ioi (0:ℝ)))] with t ht x' hx'
+    rw [Metric.mem_ball, Real.dist_eq] at hx'
+    -- Ensure x' stays far enough from zero so the exponential bound remains integrable
+    have hx'_r : r ≤ x' := by
+      have h_dist : x - r < x' := by
+        rw [abs_lt] at hx'
         linarith
-      exact h_res.le
-      exact ht_pos.le
-    exact le_trans first_ineq second_ineq
-  have h_bound_int : Integrable bound_func (volume.restrict (Ioi 0)) := by
-    apply (integrableOn_exp_mul_Ioi (by linarith) 0).integrable
+      have : x - r = r := by unfold r ; linarith
+      linarith
+    have h_const : -x' ≤ -r := by linarith [abs_lt.mp hx']
+    have ht_pos : 0 ≤ t := by
+      rw [mem_Ioi] at ht
+      linarith
+    -- Calculation showing ‖neg_sinc_sq_times_id_exp‖ ≤ exp(-r * t)
+    calc ‖neg_sinc_sq_times_id_exp t x'‖
+      _ ≤ rexp (-x' * t) := neg_sinc_sq_times_id_exp_le_exp t x'
+      _ ≤ rexp (-r * t)  :=  by
+        apply Real.exp_le_exp.mpr
+        exact mul_le_mul_of_nonneg_right h_const ht_pos
 
-  have h_diff : ∀ᵐ t ∂volume.restrict (Ioi 0), ∀ x' ∈ Metric.ball x r,
-      HasDerivAt (fun x_param => sinc_sq_times_exp t x_param) (neg_sinc_sq_times_id_exp t x') x' := by
-    rw [ae_restrict_iff' measurableSet_Ioi]
-    refine Filter.Eventually.of_forall (fun t ht_mem x' _ => ?_)
-    have ht_pos : 0 < t := by
-      rw[mem_Ioi] at ht_mem
-      exact ht_mem
-    exact hasDeriv_sinc_sq_times_exp t ht_pos x'
+  · -- 5. Prove that the bounding function exp(-r * t) is integrable
+    have h_min_r: -r<0:= by linarith
+    exact (integrableOn_exp_mul_Ioi h_min_r 0).integrable
 
-  have h_final := hasDerivAt_integral_of_dominated_loc_of_deriv_le
-    hr hF_AEmeas hF_int hF'_meas h_bound h_bound_int h_diff
-
-  unfold integral_sinc_sq_times_exp integral_neg_sinc_sq_times_id_exp
-  exact h_final.2
+  · -- 6. Prove point-wise differentiability of the integrand for almost every t
+    filter_upwards [ae_restrict_mem (measurableSet_Ioi : MeasurableSet (Ioi (0:ℝ) ))] with t ht x' _
+    have ht_gt0 : 0 < t := by
+      rw [mem_Ioi] at ht
+      exact ht
+    exact hasDeriv_sinc_sq_times_exp t ht_gt0 x'
 
 theorem hasDeriv_integral_neg_sinc_sq_times_id_exp (x : ℝ) (hx : 0 < x) :
     HasDerivAt (integral_neg_sinc_sq_times_id_exp) (integral_sin_sq_times_exp x) x := by
-  classical
-
-  have h_deriv :∀ t ∈ Ioi 0,
-      HasDerivAt
-        (fun x => neg_sinc_sq_times_id_exp t x)
-        (sin_sq_times_exp t x)
-        x :=
-  by
-    intro t ht
-    have ht_gt0 : t > 0 := by
-      apply mem_Ioi.mp ht
-
-    exact hasDeriv_neg_sinc_sq_times_id_exp t ht_gt0 x
-
-
-  have hF_AEmeas : ∀ᶠ x' in nhds x, AEStronglyMeasurable (fun t => neg_sinc_sq_times_id_exp t x') (volume.restrict (Ioi 0)) := by
-    apply Filter.Eventually.of_forall
-    intro x'
-    unfold neg_sinc_sq_times_id_exp
-    apply ContinuousOn.aestronglyMeasurable
-    · apply ContinuousOn.mul
-      apply Continuous.continuousOn
-      apply Continuous.mul
-      apply Continuous.neg
-      exact Real.continuous_sinc.pow 2
-      continuity
-      have: Continuous (fun x ↦ -x' * x):= by
-        continuity
-      apply Continuous.continuousOn
-      apply Continuous.rexp this
-    · exact measurableSet_Ioi
-
-  have h_int_x :
-    IntegrableOn (fun t => Real.exp (-x * t)) (Ioi 0) volume :=
-  by
-    have h_neg : -x < 0 := by linarith [hx]
-    exact integrableOn_exp_mul_Ioi h_neg 0
-
-  have hF_int : Integrable (fun t => neg_sinc_sq_times_id_exp  t x) (volume.restrict (Ioi 0)) :=by
-    apply MeasureTheory.Integrable.mono h_int_x
-    · exact hF_AEmeas.self_of_nhds
-    · rw [ae_restrict_iff' measurableSet_Ioi]
-      refine Filter.Eventually.of_forall (fun t ht_mem => ?_)
-      have ht_pos : 0 < t := by
-        rw [mem_Ioi] at ht_mem
-        exact ht_mem
-      have : ‖rexp (-x * t)‖= rexp (-x * t):= by
-        simp only [neg_mul, norm_eq_abs, abs_exp]
-      rw[this]
-
-      exact neg_sinc_sq_times_id_exp_le_exp t x
-
-  have hF'_meas : MeasureTheory.AEStronglyMeasurable (fun t => sin_sq_times_exp t x) (volume.restrict (Ioi 0)) := by
-    unfold sin_sq_times_exp
-    apply ContinuousOn.aestronglyMeasurable
-    · apply ContinuousOn.mul
-      apply Continuous.continuousOn
-      exact continuous_sin.pow 2
-      apply Continuous.continuousOn
-      have: Continuous (fun x' ↦ -x * x'):= by
-        continuity
-      apply Continuous.rexp this
-    · exact measurableSet_Ioi
-
+  -- Define a local radius r around x to provide a neighborhood for the derivative
   let r := x / 2
-  have hr : r > 0 := by
-    unfold r
-    simp[hx]
-
+  have hr : 0 < r := by unfold r; linarith
+  unfold integral_neg_sinc_sq_times_id_exp integral_sin_sq_times_exp
+  -- The bounding function for the derivative is again a decaying exponential
   let bound_func := fun t => Real.exp (-r * t)
 
-  have h_bound : ∀ᵐ t ∂volume.restrict (Ioi 0), ∀ x' ∈ Metric.ball x r,
-      ‖sin_sq_times_exp t x'‖ ≤ bound_func t := by
-    rw [ae_restrict_iff' measurableSet_Ioi]
-    refine Filter.Eventually.of_forall (fun t ht_mem x' hx' => ?_)
-    have ht_pos : 0 < t := by
-      rw[mem_Ioi] at ht_mem
-      exact ht_mem
-    unfold bound_func
-    have  first_ineq: ‖ sin_sq_times_exp t x'‖≤ rexp (-x' * t) := by
-      exact sin_sq_times_exp_le_exp t x'
-    have second_ineq : rexp (-x' * t) ≤ rexp (-r * t):= by
-      apply Real.exp_le_exp.mpr
-      apply mul_le_mul_of_nonneg_right
-      rw [Metric.mem_ball, Real.dist_eq] at hx'
-      have h_ineg_rx'x :  -r < x' - x := (abs_lt.mp hx').1
-      have: x-r < x':= by
-        linarith [h_ineg_rx'x]
-      have h_r_x_2 : x-r=r := by
-        unfold r
-        ring_nf
-      rw[h_r_x_2] at this
-      have h_res: -x' < -r := by
-        linarith
-      exact h_res.le
-      exact ht_pos.le
-    exact le_trans first_ineq second_ineq
-  have h_bound_int : Integrable bound_func (volume.restrict (Ioi 0)) := by
-    apply (integrableOn_exp_mul_Ioi (by linarith) 0).integrable
+  -- Use the dominated convergence theorem for derivatives
+  refine (hasDerivAt_integral_of_dominated_loc_of_deriv_le (μ := volume.restrict (Ioi 0))
+    (x₀ := x) (ε := r) (ε_pos := hr)
+    (F := fun x' t => neg_sinc_sq_times_id_exp t x')
+    (F' := fun x' t => sin_sq_times_exp t x')
+    (bound := bound_func) ?_ ?_ ?_ ?_ ?_ ?_).2
 
-  have h_diff : ∀ᵐ t ∂volume.restrict (Ioi 0), ∀ x' ∈ Metric.ball x r,
-      HasDerivAt (fun x_param => neg_sinc_sq_times_id_exp t x_param) (sin_sq_times_exp t x') x' := by
-    rw [ae_restrict_iff' measurableSet_Ioi]
-    refine Filter.Eventually.of_forall (fun t ht_mem x' _ => ?_)
-    have ht_pos : 0 < t := by
-      rw[mem_Ioi] at ht_mem
-      exact ht_mem
-    exact hasDeriv_neg_sinc_sq_times_id_exp t ht_pos x'
+  · -- 1. Prove the integrand F is measurable for all x' in the neighborhood
+    apply Eventually.of_forall; intro x'
+    let h_sinc := Continuous.mul (Real.continuous_sinc.pow 2).neg continuous_id
+    let h_exp := Real.continuous_exp.comp (continuous_mul_left (-x'))
+    exact (Continuous.mul h_sinc h_exp).aestronglyMeasurable
 
-  have h_final := hasDerivAt_integral_of_dominated_loc_of_deriv_le
-    hr hF_AEmeas hF_int hF'_meas h_bound h_bound_int h_diff
+  · -- 2. Prove the integrand F is integrable at the point x
+    have h_exp_int : Integrable (fun t ↦ rexp (-x * t)) (volume.restrict (Ioi 0)) := by
+      have h_neg : -x < 0 := by linarith [hx]
+      exact (integrableOn_exp_mul_Ioi h_neg 0).integrable
+    have h_f_meas : AEStronglyMeasurable (fun t ↦ neg_sinc_sq_times_id_exp t x) (volume.restrict (Ioi 0)) := by
+      let f_trig := (Real.continuous_sinc.pow 2).neg.mul continuous_id
+      let f_exp := Real.continuous_exp.comp (continuous_mul_left (-x))
+      exact (Continuous.mul f_trig f_exp).aestronglyMeasurable
+    -- Use the previously established bound |t * sinc²(t) * e⁻ˣᵗ| ≤ e⁻ˣᵗ
+    refine h_exp_int.mono h_f_meas ?_
+    filter_upwards with t
+    rw [norm_eq_abs (r:= rexp (-x * t)), Real.abs_exp]
+    exact neg_sinc_sq_times_id_exp_le_exp t x
 
-  unfold integral_sin_sq_times_exp integral_neg_sinc_sq_times_id_exp
-  exact h_final.2
+  · -- 3. Prove the partial derivative F' is measurable
+    let h_sin := Real.continuous_sin.pow 2
+    let h_exp := Real.continuous_exp.comp (continuous_mul_left (-x))
+    exact (Continuous.mul h_sin h_exp).aestronglyMeasurable
 
+  · -- 4. Dominate the derivative F' = sin²(t)e⁻ˣ'ᵗ by the integrable function exp(-rt)
+    filter_upwards [ae_restrict_mem measurableSet_Ioi] with t ht x' hx'
+    rw [Metric.mem_ball, Real.dist_eq] at hx'
+    -- Since sin²(t) ≤ 1, |sin²(t)e⁻ˣ'ᵗ| ≤ e⁻ˣ'ᵗ. We then bound x' by r.
+    refine (sin_sq_times_exp_le_exp t x').trans (Real.exp_le_exp.mpr (mul_le_mul_of_nonneg_right ?_ (mem_Ioi.mp ht).le))
+    have h_dist : x - r < x' := by
+      rw [abs_lt] at hx'
+      linarith
+    have : x - r = r := by unfold r ; linarith
+    linarith [abs_lt.mp hx']
+
+  · -- 5. The bounding function exp(-rt) is integrable on (0, ∞)
+    exact (integrableOn_exp_mul_Ioi (by linarith) 0)
+
+  · -- 6. Point-wise derivative: ∂/∂x' (-t * sinc²(t) * e⁻ˣ'ᵗ) = sin²(t) * e⁻ˣ'ᵗ
+    filter_upwards [ae_restrict_mem measurableSet_Ioi] with t ht x' _
+    exact hasDeriv_neg_sinc_sq_times_id_exp t (mem_Ioi.mp ht) x'
 
 lemma integrable_cexp_mul_Ioi_of_re_neg {z : ℂ} (hz : z.re < 0) (ε : ℝ) :
     Integrable (fun (t : ℝ) => cexp (↑t * z)) (volume.restrict (Ioi ε)) := by
@@ -761,299 +465,105 @@ lemma integrable_cexp_mul_Ioi_of_re_neg {z : ℂ} (hz : z.re < 0) (ε : ℝ) :
 
   rw [this]
   exact integrableOn_exp_mul_Ioi hz ε
-  -- Mesurabilité
   apply Continuous.aestronglyMeasurable
   continuity
 
 lemma add_integral_integrable(ε : ℝ)(x : ℝ) (hx : 0 < x)  :
  ∫ t in Ioi ε, (cexp (-↑t*(2*I + x))+ cexp ( ↑t*(2*I -x )) -2*cexp (- ↑t*x))=
  (∫ t in Ioi ε, cexp (-↑t*(2*I + x)))+ (∫ t in Ioi ε,cexp ( ↑t*(2*I -x ))) -∫ t in Ioi ε,(2*cexp (- ↑t*x)):= by
-  have h_int1 : Integrable (fun t ↦ cexp (↑t * (-2 * I - x))) (volume.restrict (Ioi ε)) := by
+
+  have h1 : Integrable (fun t ↦ cexp (-↑t * (2 * I + x))) (volume.restrict (Ioi ε)) := by
+    convert integrable_cexp_mul_Ioi_of_re_neg (ε := ε) (by simp [hx] : (-2*I - x).re < 0) using 1
+    ext; ring_nf
+
+  have h2 : Integrable (fun t ↦ cexp (↑t * (2 * I - x))) (volume.restrict (Ioi ε)) := by
     apply integrable_cexp_mul_Ioi_of_re_neg
     simp [hx]
-  have h_int2 : Integrable (fun t ↦ cexp (↑t * (2 * I - x))) (volume.restrict (Ioi ε)) := by
-    apply integrable_cexp_mul_Ioi_of_re_neg
-    simp [hx]
-  have h_int3 : Integrable (fun t:ℝ ↦ (2 : ℂ) * cexp (↑t * (-x))) (volume.restrict (Ioi ε)) := by
+
+  have h3 : Integrable (fun (t:ℝ) ↦ 2 * cexp (-↑t * x)) (volume.restrict (Ioi ε)) := by
     apply Integrable.const_mul
-    apply integrable_cexp_mul_Ioi_of_re_neg
-    simp [hx]
-  have h_rew : ∀ t, -↑t * (2 * I + x) = ↑t * (-2 * I - x) := fun t ↦ by ring
-  simp_rw [h_rew]
-  rw [integral_sub, integral_add]
-  · exact h_int1
-  · exact h_int2
-  · exact h_int1.add h_int2
-  · have : (fun t:ℝ ↦ 2 * cexp (-↑t * ↑x))=fun t:ℝ ↦ 2 * cexp (↑t * (-↑x)):= by
-      ext t
-      ring_nf
-    rw[this]
-    exact h_int3
+    convert integrable_cexp_mul_Ioi_of_re_neg (ε := ε) (by simp [hx] : (-x : ℂ).re < 0) using 1
+    ext; ring_nf
+  convert integral_sub (h1.add h2) h3 using 1
+  simp_rw [Pi.add_apply]
+  congr 1
+  rw [integral_add h1 h2]
 
 theorem compute_deriv_integral_sin_div_times_exp_eps(ε : ℝ)(x : ℝ) (hx : 0 < x) :
  ∫ t in Ioi ε, (Real.sin t)^2 * Real.exp (-x * t)=rexp (- x* ε)*((Real.sin (2 * ε)- (x/2) * Real.cos (2 * ε)) / (4 + x^2)+ 1 / (2 * x)) :=by
-  apply (Complex.ofReal_inj).mp
+  let F (t : ℝ) := rexp (-x * t) * (2 * Real.sin (2 * t) - x * Real.cos (2 * t)) / (x^2 + 4)
+  have h_exp : IntegrableOn (fun t ↦ rexp (-x * t)) (Ioi ε) :=
+    integrableOn_exp_mul_Ioi (neg_lt_zero.mpr hx) ε
 
-  calc  ↑(∫ (t : ℝ) in Ioi ε, (Real.sin t)^2 * rexp (-x * t))
-    _ =  ∫ t in Ioi ε, ((Real.sin t)^2* rexp (-x * t) : ℂ) := by
-      simp[←integral_complex_ofReal]
-    _= ∫ t in Ioi ε, (Real.sin t:ℂ)^2 * (rexp (-x * t) : ℂ):= by
-      congr
-    _= ∫ t in Ioi ε, (Real.sin t:ℂ)^2 * cexp (-x * ↑t) := by
-      congr
-      simp
-    _ = ∫ t in Ioi ε, ((cexp (-I * ↑t) - cexp (I * ↑t)) / (2 * I))^2 * cexp (-x * ↑t):= by
-      congr
-      funext t
-      simp
-      have h_sin : Complex.sin t = (Complex.exp (-t * I) - Complex.exp (t * I)) * I / 2 := by
-        rw [← Complex.two_sin]
-        simp
-      simp_rw [h_sin]
-      field_simp [I_ne_zero]
-      simp
-    _=∫ t in Ioi ε, (cexp (-I * ↑t) - cexp (I * ↑t))^2 / (2 * I)^2 * cexp (-x * ↑t):= by
-      congr
-      funext t
-      field_simp
-    _= ∫ t in Ioi ε, (cexp (-I * ↑t)^2 -2*cexp (-I * ↑t)*cexp (I * ↑t)+ cexp (I * ↑t)^2) / (2 * I)^2 * cexp (-x * ↑t):= by
-      congr
-      funext t
-      ring_nf
-     _= ∫ t in Ioi ε, (cexp (-2*I * ↑t) -2+ cexp (2*I * ↑t)) / (2 * I)^2 * cexp (-x * ↑t):= by
-      congr
-      funext t
-      have: cexp (-I * ↑t) ^ 2 =  cexp (-2*I * ↑t):= by
-        rw [← Complex.exp_nat_mul]
-        ring_nf
-      rw[this]
-      have: cexp (I * ↑t) ^ 2 =  cexp (2*I * ↑t):= by
-        rw [← Complex.exp_nat_mul]
-        ring_nf
-      rw[this]
-      have: 2*cexp (-I * ↑t)*cexp (I * ↑t)= 2:= by
-        field_simp
-        rw [← Complex.exp_add (-(I * ↑t)) (I * ↑t)]
-        ring_nf
-        exact Complex.exp_zero
-      rw[this]
-    _= -∫ t in Ioi ε, (cexp (-2*I * ↑t) -2+ cexp (2*I * ↑t)) / 4  * cexp (-x * ↑t):= by
-      rw [← integral_neg]
-      congr
-      funext t
-      field_simp
-      rw [I_sq]
-      ring_nf
-    _= -∫ t in Ioi ε, (cexp (-2*I * ↑t -x * ↑t) -2*cexp (-x * ↑t) + cexp (2*I * ↑t-x * ↑t)) / 4  := by
-      congr
-      funext t
-      field_simp
-      rw [sub_add_eq_add_sub, sub_mul,add_mul]
+  have h_cos : ∫ t in Ioi ε, Real.cos (2 * t) * rexp (-x * t) =
+      rexp (-x * ε) * (x * Real.cos (2 * ε) - 2 * Real.sin (2 * ε)) / (x^2 + 4) := by
 
-      have: cexp (-(2 * I * ↑t)) * cexp (-(↑t * ↑x)) =  cexp (↑t * (-(2 * I) - ↑x)):= by
-        rw [← Complex.exp_add (-(2 * I * ↑t)) (-(↑t * ↑x))]
-        ring_nf
-      rw[this]
-
-      have: cexp ((2 * I * ↑t)) * cexp (-(↑t * ↑x)) =  cexp (↑t * (2 * I - ↑x)):= by
-        rw [← Complex.exp_add ((2 * I * ↑t)) (-(↑t * ↑x))]
-        ring_nf
-      rw[this]
-      ring_nf
-     _= -∫ t in Ioi ε, (cexp (-↑t*(2*I + x))+ cexp ( ↑t*(2*I -x )) -2*cexp (- ↑t*x) ) / 4  := by
-      congr
-      funext t
-      field_simp
-      have: cexp (↑t * (-(2 * I) - ↑x)) =   cexp (-(↑t * (2 * I + ↑x))) := by
-        ring_nf
-      rw[this]
-      ring_nf
-
-    _= -∫ t in Ioi ε,1/4* (cexp (-↑t*(2*I + x))+ cexp ( ↑t*(2*I -x )) -2*cexp (- ↑t*x) ) := by
-      congr
-      funext t
-      field_simp
-    _= -1/4*(∫ t in Ioi ε, cexp (-↑t*(2*I + x))+ cexp ( ↑t*(2*I -x )) -2*cexp (- ↑t*x) ) := by
-      simp_rw [div_eq_mul_inv]
-      simp
-      rw [integral_mul_left ( 4⁻¹ )]
-    _= -1/4*((∫ t in Ioi ε, cexp (-↑t*(2*I + x)))+ (∫ t in Ioi ε,cexp ( ↑t*(2*I -x ))) -(∫ t in Ioi ε,2*cexp (- ↑t*x)) ) := by
-      rw[ add_integral_integrable ε x hx]
-    _=-1/4*((cexp ( -(2*I + x)*↑ε) / (2*I + x))+ (∫ t in Ioi ε,cexp ( ↑t*(2*I -x ))) -(∫ t in Ioi ε,2*cexp (- ↑t*x)) ) := by
-      let a := -(2*I + x)
-      have h_re : a.re < 0 := by
-        unfold a
-        simp [I_re, ofReal_re]
-        exact hx
-      have h_int_val : ∫ (t : ℝ) in Ioi ε, cexp (↑t*a) = - cexp (a*↑ε) / a := by
-        have :∫ (t : ℝ) in Ioi ε, cexp (↑t*a) = ∫ (t : ℝ) in Ioi ε, cexp (a*↑t):= by
-          congr
-          funext t
-          field_simp
-        rw[this]
-        apply  integral_exp_mul_complex_Ioi h_re ε
-
-      have: ∀t: ℝ , cexp (↑t * a) = cexp (-↑t*(2*I + x)) := by
-        unfold a
-        intro t
-        ring_nf
-      simp_rw[this] at h_int_val
-      rw[h_int_val]
-      unfold a
-      simp
-      field_simp
-      have h_in : -↑x + -(2 * I) = -(2 * I+↑x ) := by ring
-      rw[h_in]
-      field_simp
-
-
-    _=-1/4*((cexp ( -(2*I + x)*↑ε) / (2*I + x))+ (-cexp ((2 * I - ↑x) * ↑ε) / (2 * I - ↑x)) -(∫ t in Ioi ε,2*cexp (- ↑t*x)) ) := by
-      let a := 2*I -x
-      have h_re : a.re < 0 := by
-        unfold a
-        simp [I_re, ofReal_re]
-        exact hx
-      have h_int_val : ∫ (t : ℝ) in Ioi ε, cexp (↑t*a) = - cexp (a*↑ε) / a := by
-        have :∫ (t : ℝ) in Ioi ε, cexp (↑t*a) = ∫ (t : ℝ) in Ioi ε, cexp (a*↑t):= by
-          congr
-          funext t
-          field_simp
-        rw[this]
-        apply  integral_exp_mul_complex_Ioi h_re ε
-      unfold a at h_int_val
-      rw[h_int_val]
-
-    _=-1/4*((cexp ( -(2*I + x)*↑ε) / (2*I + x))+ (-cexp ((2 * I - ↑x) * ↑ε) / (2 * I - ↑x)) +(2* cexp (↑(-x) * ↑ε) / ↑(-x)) ) := by
-      let a:ℂ := ↑(-x)
-
-      have h_re : a.re < 0 := by
-        unfold a
-        simp [I_re, ofReal_re]
-        exact hx
-      have h_int_val : ∫ (t : ℝ) in Ioi ε,2* cexp (↑t*a) = - 2*cexp (a*↑ε) / a := by
-        have :∫ (t : ℝ) in Ioi ε, 2* cexp (↑t*a) = 2*∫ (t : ℝ) in Ioi ε, cexp (a*↑t):= by
-          rw[integral_mul_left 2]
-          congr
-          funext t
-          field_simp
-        rw[this]
-        rw[integral_exp_mul_complex_Ioi h_re ε]
-        ring_nf
-      have: ∀t: ℝ , cexp (↑t * a) = cexp (-↑t*x) := by
-        intro t
-        unfold a
-        push_cast
-        ring_nf
-      simp_rw[this] at h_int_val
-      unfold a at h_int_val
-      rw[h_int_val]
-      have:  - -2 * cexp (↑(-x) * ↑ε) / ↑(-x)= 2 * cexp (↑(-x) * ↑ε) / ↑(-x):= by
-        ring
-      congr 2
+    have h_eq : rexp (-x * ε) * (x * Real.cos (2 * ε) - 2 * Real.sin (2 * ε)) / (x^2 + 4) = 0 - F ε := by
+      dsimp [F]
       ring
-
-    _=-1/4*((cexp ( -(2*I + x)*↑ε) *(2 * I - ↑x) / ((2*I + x)*(2 * I - ↑x)))+ (-cexp ((2 * I - ↑x) * ↑ε) / (2 * I - ↑x)) +(2* cexp (↑(-x) * ↑ε) / ↑(-x)) ) := by
-      congr 2
-      have h1 : 2 * I - ↑x ≠ 0 := by
-        intro h
-        have h_re := congr_arg Complex.re h
-        simp at h_re
-        exact hx.ne' h_re
-      field_simp
-
-    _=-1/4*((cexp ( -(2*I + x)*↑ε) *(2 * I - ↑x) / ((2*I + x)*(2 * I - ↑x)))+ (-cexp ((2 * I - ↑x) * ↑ε) *(2*I + x)/ ((2*I + x)*(2 * I - ↑x))) +(2* cexp (↑(-x) * ↑ε) / ↑(-x)) ) := by
-      congr 2
-      have h1 : 2*I + x ≠ 0 := by
-        intro h
-        have h_re := congr_arg Complex.re h
-        simp at h_re
-        exact hx.ne' h_re
-      field_simp
-    _=-1/4*((cexp ( -(2*I + x)*↑ε) *(2 * I - ↑x) -cexp ((2 * I - ↑x) * ↑ε) *(2*I + x))/ ((2*I + x)*(2 * I - ↑x)) +(2* cexp (↑(-x) * ↑ε) / ↑(-x)) ) := by
-      congr 2
-      ring
-
-    _=-1/4*(-(cexp ( -(2*I + x)*↑ε) *(2 * I - ↑x) -cexp ((2 * I - ↑x) * ↑ε) *(2*I + x))/ (4 + x^2) +(2* cexp (↑(-x) * ↑ε) / ↑(-x)) ) := by
-      congr 2
-      have h_denom : (2*I + x)*(2 * I - ↑x) = -(4 + ↑x^2) := by
-        ring_nf
-        simp only [I_sq]
-        ring_nf
-      rw [h_denom]
-      field_simp
-     _=-1/4 * ( ((cexp (2*I*↑ε) - cexp (-2*I*↑ε)) * 2*I * cexp (-↑x*↑ε) + (cexp (2*I*↑ε) + cexp (-2*I*↑ε)) * x * cexp (-↑x*↑ε)) / (4 + x^2) + (2 * cexp (-↑x*↑ε) / -↑x) ) := by
-      congr 2
-      field_simp
-      have: cexp (-((2 * I + ↑x) * ↑ε))= cexp (-2 * I *↑ε) *cexp (-↑x* ↑ε):= by
-        ring_nf
-        rw [exp_sub (-(I * ↑ε * 2)) (↑x * ↑ε)]
+    rw [h_eq]
+    apply integral_Ioi_of_hasDerivAt_of_tendsto (f := F) (m := 0)
+    · dsimp [F]
+      apply Continuous.continuousOn
+      apply Continuous.div_const
+      apply Continuous.mul
+      · exact Continuous.rexp (continuous_mul_left _)
+      · apply Continuous.sub <;> apply Continuous.mul <;> try exact continuous_const
+        · continuity
+        · continuity
+      · exact left_mem_Ici
+    · intro t _
+      dsimp [F]
+      convert HasDerivAt.mul (((hasDerivAt_id t).const_mul (-x)).exp) ((((hasDerivAt_id t).const_mul 2).sin.const_mul 2 |>.sub (((hasDerivAt_id t).const_mul 2).cos.const_mul x)).div_const (x^2 + 4))
+      using 1
+      · ext x; dsimp; field_simp
+      · dsimp; field_simp;ring_nf
+    · apply Integrable.mono h_exp
+      · exact (Real.continuous_cos.comp (continuous_mul_left 2)).mul (continuous_mul_left (-x)).rexp |>.aestronglyMeasurable
+      · refine ae_of_all _ (fun t ↦ ?_)
+        simp [field, Real.abs_cos_le_one]
+    · have h_rew : (fun t ↦ F t) = (fun t ↦ (2 * Real.sin (2 * t) - x * Real.cos (2 * t)) / (x ^ 2 + 4) * rexp (-x * t)) := by
+        ext t; dsimp [F]; ring
+      simp[h_rew]
+      apply bdd_le_mul_tendsto_zero' ((2 + |x|) / (x ^ 2 + 4))
+      · filter_upwards with t
+        rw [abs_div, abs_of_pos (a:= x^2+ 4) (by nlinarith)]
         field_simp
-        rw [← Complex.exp_add]
-        ring_nf
-        simp[Complex.exp_zero]
-      rw[this]
-      have: cexp (↑ε * (2 * I - ↑x)) = cexp (↑ε *2 * I) * cexp (-↑x* ↑ε):= by
-        ring_nf
-        rw [exp_sub (↑ε* I * 2) (↑ε*↑x)]
-        field_simp
-        rw [← Complex.exp_add]
-        ring_nf
-        simp[Complex.exp_zero]
-      rw[this]
-      field_simp
-      ring_nf
-      calc 2 * cexp (↑(-x) * ↑ε) / ↑(-x)
-      _= 2 * cexp ((-↑x) * ↑ε) / (-↑x) := by
-        rw[Complex.ofReal_neg]
-      _ = 2 * cexp (-(↑x * ↑ε)) / (-↑x) := by
-        ring
-      _ = 2 * cexp (-↑x * ↑ε) / -↑x    := by
-        ring
-    _= -cexp (-↑x * ↑ε) / 4 * ( (2 * I * (cexp (2 * I * ↑ε) - cexp (-2 * I * ↑ε)) + x * (cexp (2 * I * ↑ε) + cexp (-2 * I * ↑ε))) / (4 + x^2) - 2 / x ) := by
-      ring_nf
-    _= -cexp (-↑x * ↑ε) / 4 * ( (2 * I * (2 * I * Complex.sin (2 * ε)) + x * (2 * Complex.cos (2 * ε))) / (4 + x^2) - 2 / x ) := by
-      have: cexp (2 * I * ↑ε) - cexp (-2 * I * ↑ε)= 2 * I*Complex.sin (2  * ↑ε):= by
-        unfold Complex.sin
-        ring
-        rw[I_sq]
-        ring
-      rw[this]
-      have: cexp (2 * I * ↑ε) + cexp (-2 * I * ↑ε)= 2 * Complex.cos (2 * ↑ε):= by
-        unfold Complex.cos
-        field_simp
-      rw[this]
-    _= -cexp (-↑x * ↑ε) * ( (-Complex.sin (2 * ε) + (x/2) * Complex.cos (2 * ε)) / (4 + x^2) - 1 / (2 * x) ) := by
-      ring_nf
-      rw[I_sq]
-      ring_nf
-    _=-rexp (- x* ε)* ( (-Complex.sin (2 * ε) + (x/2) * Complex.cos (2 * ε)) / (4 + x^2) - 1 / (2 * x) ) := by
-      have : cexp (- ↑x* ↑ε)= cexp (↑(- x* ε)):= by
-        push_cast
-        simp
-      rw[this]
-      rw[Complex.ofReal_exp]
-    _=-rexp (- x* ε)* ( (-↑(Real.sin (2 * ε)) + (x/2) * ↑(Real.cos (2 * ε))) / (4 + x^2) - 1 / (2 * x) ) := by
-      rw[Complex.ofReal_cos]
-      rw[Complex.ofReal_sin]
-      push_cast
-      field_simp
-    _=-rexp (- x* ε)* (↑(-(Real.sin (2 * ε)) + (x/2) * (Real.cos (2 * ε))) / (↑( (4:ℝ) + x^2))- ↑(1 / (2 * x))):= by
-      push_cast
-      field_simp
-    _=-rexp (- x* ε)* (↑((-Real.sin (2 * ε)+ (x/(2:ℝ)) * Real.cos (2 * ε)) / ((4:ℝ) + x^2))- ↑(1 / (2 * x))):= by
-      push_cast
-      field_simp
-    _=-rexp (- x* ε)* ↑(((-Real.sin (2 * ε)+ (x/(2:ℝ)) * Real.cos (2 * ε)) / ((4:ℝ) + x^2))- (1:ℝ) / ((2:ℝ) * x)):= by
-      push_cast
-      field_simp
-    _=↑(-rexp (- x* ε)*((-Real.sin (2 * ε)+ (x/(2:ℝ)) * Real.cos (2 * ε)) / ((4:ℝ) + x^2)- (1:ℝ) / ((2:ℝ) * x))):= by
-      push_cast
-      field_simp
-    _=↑(rexp (- x* ε)*((Real.sin (2 * ε)- (x/(2:ℝ)) * Real.cos (2 * ε)) / ((4:ℝ) + x^2)+ (1:ℝ) / ((2:ℝ) * x))):= by
-      push_cast
-      field_simp
-      ring_nf
+        calc |2 * Real.sin (2 * t) - x * Real.cos (2 * t)|
+        _ ≤ |2 * Real.sin (2 * t)| + |x * Real.cos (2 * t)| := abs_sub _ _
+        _ ≤ 2 * 1 + |x| * 1 := add_le_add (by simp [abs_sin_le_one]) (by simp; field_simp[hx]; simp[abs_cos_le_one])
+        _ = 2 + |x| := by ring
+      · exact Real.tendsto_exp_neg_atTop_nhds_zero.comp (tendsto_id.const_mul_atTop hx)
 
+  simp_rw [Real.sin_sq, sub_mul, div_mul_eq_mul_div, one_mul]
+  rw [integral_sub]
+  rotate_left
+  · exact h_exp
+  · apply Integrable.mono h_exp
+    · exact ((Real.continuous_cos.pow 2).mul (continuous_exp.comp (continuous_mul_left (-x)))).aestronglyMeasurable
+    · refine ae_of_all _ (fun t ↦ ?_)
+      simp [field, Real.abs_cos_le_one]
+  simp_rw [Real.cos_sq, div_eq_mul_inv, add_mul, mul_assoc]
+  simp_rw[one_mul]
+  rw [integral_add]
+  rotate_left
+  · apply Integrable.const_mul (c:=2⁻¹); exact h_exp
+  · apply Integrable.mono h_exp
+    · exact ((Real.continuous_cos.comp (continuous_mul_left 2)).mul (continuous_const.mul (continuous_exp.comp (continuous_mul_left (-x))))).aestronglyMeasurable
+    · refine ae_of_all _ (fun t ↦ ?_)
+      simp [field]
+      exact (Real.abs_cos_le_one (2 * t)).trans (by linarith)
+
+  rw [integral_const_mul]
+  have h_pull : ∫ a in Ioi ε, Real.cos (2 * a) * (2⁻¹ * rexp (-x * a)) =
+      2⁻¹ * ∫ a in Ioi ε, Real.cos (2 * a) * rexp (-x * a) := by
+    rw [←integral_const_mul]
+    congr 1
+    funext a
+    field_simp
+  rw[h_pull,h_cos,integral_exp_mul_Ioi (by linarith[hx]) ε]
+  field_simp [hx.ne.symm]
+  ring_nf
 
 theorem hasDeriv_integral_neg_sinc_sq_times_id_exp' (x : ℝ) (hx : 0 < x) : HasDerivAt (integral_neg_sinc_sq_times_id_exp) (-(1/2) * x / (4 + x^2)+ 1 / (2 * x)) x:= by
   have h_deriv: HasDerivAt (integral_neg_sinc_sq_times_id_exp) (integral_sin_sq_times_exp x) x := by
@@ -1067,281 +577,137 @@ theorem hasDeriv_integral_neg_sinc_sq_times_id_exp' (x : ℝ) (hx : 0 < x) : Has
   rw[this] at h_deriv
   exact h_deriv
 
-
 lemma tendsto_integral_neg_sinc_sq_times_id_exp :
-    Tendsto (integral_neg_sinc_sq_times_id_exp) atTop (𝓝 0) := by
-  classical
-  unfold integral_neg_sinc_sq_times_id_exp  neg_sinc_sq_times_id_exp
+    Tendsto integral_neg_sinc_sq_times_id_exp atTop (𝓝 0) := by
+  unfold integral_neg_sinc_sq_times_id_exp neg_sinc_sq_times_id_exp
   rw [tendsto_zero_iff_norm_tendsto_zero]
-  let f := fun x : ℝ ↦ ‖∫ (t : ℝ) in Ioi 0, -sinc t ^ 2 * t * rexp (-x * t)‖
-  let g : ℝ → ℝ := fun _ ↦ 0
-  let h := fun x : ℝ ↦ 1 / x
-  apply tendsto_of_tendsto_of_tendsto_of_le_of_le' (g := g) (h := h)
-  · exact tendsto_const_nhds
-  · unfold h
-    simp_rw[one_div]
-    exact tendsto_inv_atTop_zero
-  · exact Eventually.of_forall (fun x ↦ norm_nonneg _)
-  · filter_upwards [eventually_gt_atTop 0] with x hx_pos
-    dsimp [f, h]
-    have h_int_exp : ∫ t in Ioi 0, rexp (-x * t) = 1 / x := by
-      rw [integral_exp_mul_Ioi (neg_neg_of_pos hx_pos) 0]
-      simp [ mul_zero, Real.exp_zero]
-    rw [← h_int_exp]
-    rw [← Real.norm_eq_abs]
-    apply norm_integral_le_of_norm_le
-    · have h_neq : ∫ (t : ℝ) in Ioi 0, rexp (-x * t) ≠ 0 := by
-        rw [h_int_exp]
-        exact one_div_ne_zero (ne_of_gt hx_pos)
-
-      apply MeasureTheory.Integrable.of_integral_ne_zero
-      exact h_neq
-
-    · filter_upwards [self_mem_ae_restrict (measurableSet_Ioi : MeasurableSet (Ioi (0:ℝ)))] with t ht
-      have ht_pos : 0 < t := mem_Ioi.mp ht
-      rw [norm_mul, norm_eq_abs (rexp _), abs_exp]
-      field_simp
-      rw [norm_eq_abs]
-      simp[Real.abs_sinc_le_one]
-      by_cases h : |t| ≤ 1
-      · have h_sinc : |Real.sinc t| ≤ 1 := Real.abs_sinc_le_one t
-        have h_sinc2 : Real.sinc t ^ 2≤ 1 := by
-          simp
-          exact h_sinc
-        have abs_t_val:= abs_nonneg t
-        calc Real.sinc t ^ 2* |t|
-          _ ≤ 1 * |t| := by
-            apply mul_le_mul_of_nonneg_right  h_sinc2 abs_t_val
-          _ ≤ 1  := by simp [h]
-      · have :t≠ 0:= by
-          intro ht_zero
-          push_neg at h
-          rw [ht_zero, abs_zero] at h
-          have: ¬((1:ℝ)<0) := by linarith
-          exact absurd h this
-        unfold sinc
-        simp[this]
-        rw [div_pow, ← sq_abs (a:= t)]
-        field_simp
-        have h_sin : |Real.sin t| ≤ 1 := Real.abs_sin_le_one t
-        have h_sin2 : Real.sin t ^ 2≤ 1 := by
-          simp
-          exact h_sin
-        push_neg at h
-        exact h_sin2.trans h.le
+  refine tendsto_of_tendsto_of_tendsto_of_le_of_le' tendsto_const_nhds tendsto_inv_atTop_zero ?_ ?_
+  · filter_upwards with x using norm_nonneg _
+  · filter_upwards [eventually_gt_atTop 0] with x hx
+    have : x⁻¹ = ∫ t in Ioi 0, rexp (-x * t) := by
+      rw[integral_exp_mul_Ioi (neg_neg_of_pos hx) 0];simp
+    rw [this]
+    refine norm_integral_le_of_norm_le (integrableOn_exp_mul_Ioi (neg_neg_of_pos hx) 0) ?_
+    filter_upwards [self_mem_ae_restrict (measurableSet_Ioi : MeasurableSet (Ioi (0:ℝ)))] with t ht
+    rw [norm_mul, norm_mul, norm_neg, norm_pow, norm_eq_abs, norm_eq_abs, norm_eq_abs, Real.abs_exp]
+    field_simp
+    by_cases h : |t| ≤ (1:ℝ)
+    · exact mul_le_one₀ (pow_le_one₀ (n:=2) (abs_nonneg _) (Real.abs_sinc_le_one t)) ((abs_nonneg t)) h
+    · have ht_pos : 0 < t := mem_Ioi.mp ht
+      have ht_ne : t ≠ 0 := ht_pos.ne'
+      rw [abs_of_pos ht_pos] at h; push_neg at h ;rw [abs_of_pos ht_pos]
+      unfold sinc
+      simp[ht_ne] ; field_simp
+      exact (Real.sin_sq_le_one t).trans h.le
 
 lemma tendsto_integral_sinc_sq_times_exp :
-    Tendsto (integral_sinc_sq_times_exp) atTop (𝓝 0) := by
-  classical
-  unfold integral_sinc_sq_times_exp  sinc_sq_times_exp
+  Tendsto integral_sinc_sq_times_exp atTop (𝓝 0) := by
+  unfold integral_sinc_sq_times_exp sinc_sq_times_exp
   rw [tendsto_zero_iff_norm_tendsto_zero]
-  let f := fun x : ℝ ↦ ‖∫ (t : ℝ) in Ioi 0, rexp (-x * t) * sinc t ^ 2‖
-  let g : ℝ → ℝ := fun _ ↦ 0
-  let h := fun x : ℝ ↦ 1 / x
-  apply tendsto_of_tendsto_of_tendsto_of_le_of_le' (g := g) (h := h)
-  · exact tendsto_const_nhds
-  · unfold h
-    simp_rw[one_div]
-    exact tendsto_inv_atTop_zero
-  · exact Eventually.of_forall (fun x ↦ norm_nonneg _)
-  · filter_upwards [eventually_gt_atTop 0] with x hx_pos
-    dsimp [f, h]
-    have h_int_exp : ∫ t in Ioi 0, rexp (-x * t) = 1 / x := by
-      rw [integral_exp_mul_Ioi (neg_neg_of_pos hx_pos) 0]
-      simp [ mul_zero, Real.exp_zero]
-    rw [← h_int_exp]
-    rw [← Real.norm_eq_abs]
-    apply norm_integral_le_of_norm_le
-    · have h_neq : ∫ (t : ℝ) in Ioi 0, rexp (-x * t) ≠ 0 := by
-        rw [h_int_exp]
-        exact one_div_ne_zero (ne_of_gt hx_pos)
-
-      apply MeasureTheory.Integrable.of_integral_ne_zero
-      exact h_neq
-
-    · filter_upwards [self_mem_ae_restrict (measurableSet_Ioi : MeasurableSet (Ioi (0:ℝ)))] with t ht
-      have ht_pos : 0 < t := mem_Ioi.mp ht
-      rw [norm_mul, norm_eq_abs (rexp _), abs_exp]
-      field_simp
-      rw [norm_eq_abs]
-      simp[Real.abs_sinc_le_one]
+  refine tendsto_of_tendsto_of_tendsto_of_le_of_le' tendsto_const_nhds tendsto_inv_atTop_zero (Eventually.of_forall fun _ ↦ norm_nonneg _) ?_
+  filter_upwards [eventually_gt_atTop 0] with x hx
+  have : x⁻¹ = ∫ t in Ioi 0, rexp (-x * t) := by
+      rw[integral_exp_mul_Ioi (neg_neg_of_pos hx) 0];simp
+  rw [this]
+  refine norm_integral_le_of_norm_le (integrableOn_exp_mul_Ioi (neg_neg_of_pos hx) 0) ?_
+  filter_upwards
+  intro a
+  rw [norm_mul, norm_pow, norm_eq_abs,norm_eq_abs, Real.abs_exp]
+  field_simp
+  exact pow_le_one₀ (n:=2) (abs_nonneg _) (Real.abs_sinc_le_one a)
 
 theorem integral_neg_sinc_sq_times_id_exp_eq (x : ℝ) (hx : 0 < x) :
-    integral_neg_sinc_sq_times_id_exp x = 1/4*Real.log (x^2/(4+x^2)) := by
-    let G := fun t => 1/4* Real.log (t^2/(4+t^2))
-    let H := fun t => integral_neg_sinc_sq_times_id_exp t - G t
-    have G_diff:  ∀ y >0 , HasDerivAt G (-(1/2) * y / (4 + y^2)+ 1 / (2 * y)) y := by
-      intro y hy
+    integral_neg_sinc_sq_times_id_exp x = 1/4 * Real.log (x^2 / (4 + x^2)) := by
+  -- Define the target logarithmic function G and the difference function 'diff'
+  let G := fun t ↦ 1/4 * (Real.log (t^2) - Real.log (4 + t^2))
+  let diff := fun t ↦ integral_neg_sinc_sq_times_id_exp t - G t
 
-      have hg : HasDerivAt G (-(1/2) * y / (4 + y^2) + 1 / (2 * y)) y := by
-        let f := fun t : ℝ ↦ t^2 / (4 + t^2)
-        let f' := (8 * y) / (4 + y^2)^2
-        have hGLog: G = fun t ↦ 1/4* Real.log (f t) := by
-          unfold G f
-          simp
-        have h_f_deriv : HasDerivAt f f' y := by
-          unfold f'
-          let u:= fun t : ℝ ↦ t^2
-          let v:= fun t : ℝ ↦ (4 + t^2)
-          have : f= fun t:ℝ ↦ u t/ v t:= by
-            unfold f u v
-            funext t
-            simp
-          rw[this]
-          have hu : HasDerivAt u (2 * y) y := by
-            unfold u
-            convert hasDerivAt_pow 2 y
-            simp
-          have hv : HasDerivAt v (0+2 * y) y := by
-            let v1:= fun t :ℝ ↦ (4:ℝ)
-            let v2:= fun t :ℝ ↦ t^2
-            have : v = v1+ v2 := by
-              unfold v v1 v2
-              funext t
-              simp
-            rw[this]
-            have hv1 : HasDerivAt v1 0 y := by
-              unfold v1
-              exact hasDerivAt_const (c:=4) y
-            have hv2 : HasDerivAt v2 (2 * y) y := by
-              unfold v2
-              convert hasDerivAt_pow 2 y
-              simp
-            apply HasDerivAt.add (f:=v1) (g:=v2) hv1 hv2
-          simp at hv
-          apply HasDerivAt.congr_deriv (HasDerivAt.div hu hv ?_)
-          · unfold u v at *
-            field_simp
-            ring_nf
-          · unfold v
-            have : 0 < 4+ y ^ 2:= by
-              have : 0 ≤ y ^ 2 := sq_nonneg y
-              linarith
-            linarith
-        have h_f_pos : f y ≠ 0 := by
-          unfold f
-          have pow_y: 0 < y ^ 2 := pow_pos hy 2
-          have pow_y_plus_const: 0 < 4 + y ^ 2:=
-          by linarith [sq_nonneg y]
-          have:=div_pos pow_y pow_y_plus_const
-          linarith
+  -- Step 1: Calculate the derivative of G
+  have hG : ∀ y ∈ Ioi 0, HasDerivAt G (1 / (2 * y) - y / (2 * (4 + y^2))) y := by
+    intro y hy
+    have y_pos : 0 < y := mem_Ioi.mp hy
+    apply HasDerivAt.congr_deriv (f' := 1/(2*y) - y/(2*(4+y^2)))
+    · unfold G; simp_rw [mul_sub]
+      apply HasDerivAt.sub
+      · -- Differentiate 1/4 * log(y²) = 1/2 * log(y)
+        convert (HasDerivAt.log (hasDerivAt_id y) y_pos.ne').const_mul (1/2) using 1
+        · funext a ; rw[log_pow];rw [Nat.cast_ofNat]; simp only [id_eq]
+          by_cases h : Real.log a = 0
+          · rw [h]; simp
+          · field_simp
+            ring
+        · simp only [id_eq]; field_simp
+      · -- Differentiate 1/4 * log(4 + y²)
+        convert (HasDerivAt.log (HasDerivAt.const_add 4 (hasDerivAt_pow 2 y)) (by positivity)).const_mul (1/4) using 1; field_simp; ring
+    · field_simp
 
+  -- Step 2: Show the derivative of (Integral - G) is zero
+  -- This implies the function is constant on (0, ∞)
+  have h_deriv_zero : ∀ y ∈ Ioi 0, HasDerivAt diff 0 y := by
+    intro y hy
+    have y_pos : 0 < y := mem_Ioi.mp hy
+    -- Use the previously proven derivative of the integral
+    have h_int := hasDeriv_integral_neg_sinc_sq_times_id_exp' y y_pos
+    convert h_int.sub (hG y hy) using 1; field_simp; ring
 
-        have h_log_deriv : HasDerivAt (fun t ↦   Real.log (f t)) (f' / f y) y := by
-          apply HasDerivAt.log h_f_deriv h_f_pos
-
-        unfold f f' at h_log_deriv
-        unfold G
-        field_simp at h_log_deriv
-        have: 8 / (y * (4 + y ^ 2)) = 2/y - 2*y/ (4 + y^2):= by
-          field_simp
-          ring_nf
-        simp_rw[this] at h_log_deriv
-        have: -(1 / 2) * y / (4 + y ^ 2) + 1 / (2 * y)= 1/4*( 2/y - 2*y/ (4 + y^2)):= by
-          field_simp
-          ring_nf
+  -- Step 3: Show that G(y) tends to 0 as y → ∞
+  have h_lim_zero : Tendsto diff atTop (𝓝 0) := by
+    rw [← sub_zero (0 : ℝ)]
+    -- We already know the integral part tends to zero
+    apply Tendsto.sub tendsto_integral_neg_sinc_sq_times_id_exp
+    have hG_lim : Tendsto G atTop (𝓝 0) := by
+      -- Rewrite log(y²) - log(4 + y²) as log(y² / (4 + y²))
+      refine (tendsto_congr' ( f₁:= fun t ↦ 1/4 * Real.log (t^2 / (4 + t^2))) (f₂:=G) ?_).mp ?_
+      · filter_upwards [eventually_gt_atTop 0] with t ht
+        rw [Real.log_div (pow_ne_zero 2 ht.ne') (by positivity)]
+      -- Show the argument of the log tends to 1
+      refine (tendsto_congr' (f₁ := fun t ↦ 1/4 * Real.log (1 / (4 / t^2 + 1))) ?_).mp ?_
+      · filter_upwards [eventually_gt_atTop 0] with t ht
+        field_simp [ht.ne']
+      rw [show (0 : ℝ) = 1/4 * Real.log 1 by simp]
+      apply Tendsto.const_mul
+      apply (continuousAt_log (by norm_num)).tendsto.comp
+      -- Show 1 / (4/t² + 1) → 1 as t → ∞
+      have h_frac : Tendsto (fun t:ℝ ↦ 1 / (4 / t^2 + 1)) atTop (𝓝 1) := by
+        have : (fun t ↦ 1 / (4 / t^2 + 1)) = (fun _ ↦ (1 : ℝ)) / (fun t ↦ 4 / t^2 + 1) := by
+            rfl
         rw[this]
-        exact h_log_deriv.const_mul (1 / 4)
-      exact hg
+        convert Tendsto.div (tendsto_const_nhds (x := 1)) ?hg (show (1 : ℝ) ≠ 0 by norm_num)
+        · field_simp
+        · convert Tendsto.add (Filter.Tendsto.div_atTop (tendsto_const_nhds (x := (4:ℝ))) (tendsto_pow_atTop (n:= 2) (by norm_num))) (tendsto_const_nhds (x := 1))
+          ring_nf
+      exact h_frac
+    exact hG_lim
 
-    have h_deriv_eq : ∀ y >0 ,
-      HasDerivAt integral_neg_sinc_sq_times_id_exp (-(1/2) * y / (4 + y^2)+ 1 / (2 * y)) y ∧
-      HasDerivAt G (-(1/2) * y / (4 + y^2)+ 1 / (2 * y)) y := by
-        intro y hy
-        refine ⟨hasDeriv_integral_neg_sinc_sq_times_id_exp' y hy, ?_⟩
-        exact G_diff y hy
+  -- Step 4: Use the constant function theorem
+  -- Since the derivative is zero and the limit at infinity is zero, the function is zero everywhere
+  have h_deriv_zero' : EqOn (deriv diff) 0 (Set.Ioi 0) := by
+    intro y hy
+    have h := h_deriv_zero y hy
+    simpa using h.deriv
+  have h_Diffdiff: DifferentiableOn ℝ diff (Set.Ioi 0) := by
+    intro y hy
+    exact (h_deriv_zero y hy).differentiableAt.differentiableWithinAt
 
+  -- Topology prerequisites for the constant function theorem
+  have hIoi_open : IsOpen (Set.Ioi (0 : ℝ)) :=
+    isOpen_Ioi
+  have hIoi_preconnected : IsPreconnected (Set.Ioi (0 : ℝ)) :=
+    isPreconnected_Ioi
 
-    have h_Hdiff : DifferentiableOn ℝ H (Set.Ioi 0) := by
-      intro y hy
-      have hF_diff : DifferentiableAt ℝ integral_neg_sinc_sq_times_id_exp y :=
-    (hasDeriv_integral_neg_sinc_sq_times_id_exp' y hy).differentiableAt
-      have hG : DifferentiableAt ℝ G y :=
-        (G_diff y hy).differentiableAt
-      exact (hF_diff.sub hG).differentiableWithinAt
+  -- The function is constant on the interval
+  have h_const : ∀ y ∈ Ioi 0, diff y = diff x :=
+    fun y hy ↦ IsOpen.is_const_of_deriv_eq_zero hIoi_open hIoi_preconnected h_Diffdiff h_deriv_zero' hy hx
+  -- Since it's constant and tends to 0, it must be 0
+  have h_is_zero : diff x = 0 := by
+    refine tendsto_nhds_unique (tendsto_const_nhds.congr' ?_) h_lim_zero
+    filter_upwards [eventually_gt_atTop 0] with y hy
+    exact (h_const y (mem_Ioi.mpr hy)).symm
 
-
-    have h_Hzero: ∀ y > 0, HasDerivAt (fun y =>H y) 0 y := by
-      intro y hy
-      have hF := (h_deriv_eq y hy).1
-      have hG := (h_deriv_eq y hy).2
-      simpa using hF.sub hG
-
-    have h_Hzero' : EqOn (deriv H) 0 (Set.Ioi 0) := by
-      intro y hy
-      have h := h_Hzero y hy
-      simpa using h.deriv
-
-    have hIoi_open : IsOpen (Set.Ioi (0 : ℝ)) :=
-      isOpen_Ioi
-
-    have hIoi_preconnected : IsPreconnected (Set.Ioi (0 : ℝ)) :=
-      isPreconnected_Ioi
-
-    have h_lim : Tendsto H atTop (𝓝 0) := by
-      have hF_lim : Tendsto integral_neg_sinc_sq_times_id_exp atTop (𝓝 0) := by
-        let h:= tendsto_integral_neg_sinc_sq_times_id_exp
-        unfold integral_neg_sinc_sq_times_id_exp
-        unfold neg_sinc_sq_times_id_exp
-        exact h
-
-      have hG_lim : Tendsto G atTop (𝓝 0) := by
-        unfold G
-        rw [show (0 : ℝ) = 1 / 4 * 0 by ring]
-        apply Tendsto.const_mul
-
-        have h_log_cont : ContinuousAt Real.log 1 := continuousAt_log (by norm_num)
-        rw[show (0 : ℝ) = Real.log 1 by rw [Real.log_one]]
-        apply (continuousAt_log (by norm_num)).tendsto.comp
-        let f := fun t:ℝ ↦ t^2
-        have h_f : Tendsto f atTop atTop := tendsto_pow_atTop (by norm_num)
-        have h_frac : Tendsto (fun k:ℝ ↦ k ^ 2 / (4 + k ^ 2)) atTop (𝓝 1) := by
-          have : Tendsto (fun k:ℝ ↦ 1 / (4 * (1 / k ^ 2) + 1)) atTop (𝓝 (1 / (4 * 0 + 1))) := by
-            rw [show (fun k: ℝ ↦ (1:ℝ)/ ((4:ℝ) * ((1:ℝ) / k ^ 2) + (1:ℝ))) =( fun k:ℝ ↦ ((4:ℝ) * (1 / k ^ 2) + (1:ℝ))⁻¹) by ext; simp]
-            rw [show (1 / (4 * 0 + 1) : ℝ) = ((4 * 0 + 1)⁻¹: ℝ) by simp]
-            apply Tendsto.inv₀
-            apply Tendsto.add
-            · apply Tendsto.const_mul
-              have: (fun k ↦ 1 / k ^ 2)= fun k:ℝ ↦  k ^ (-(2:ℤ)):= by
-                funext k
-                simp
-                rfl
-              rw[this]
-              have: 2≠ 0:= by linarith
-              exact tendsto_pow_neg_atTop this
-            · exact tendsto_const_nhds
-            · ring_nf
-              linarith
-          simp at this
-          refine (tendsto_congr' ?_).mp this
-          filter_upwards [eventually_gt_atTop 0] with k hk
-          field_simp
-        exact h_frac
-      have: (0:ℝ) = 0-0 := by
-        simp
-      rw[this]
-      unfold H
-      apply Tendsto.sub
-      · exact hF_lim
-      · exact hG_lim
-
-    have h_const : ∀ a ∈ Ioi 0, ∀ b ∈ Ioi 0, H a = H b := by
-      intro a ha
-      intro b hb
-      apply IsOpen.is_const_of_deriv_eq_zero hIoi_open hIoi_preconnected h_Hdiff h_Hzero' ha hb
-
-    have h_is_zero : ∀ y ∈ Ioi 0, H y = 0 := by
-      intro y hy
-      have h_ev : H =ᶠ[atTop] (fun _ ↦ H y) := by
-        filter_upwards [eventually_gt_atTop 0] with b hb
-        exact h_const b hb y hy
-      apply tendsto_nhds_unique _ h_lim
-      have h_lim_const : Tendsto H atTop (𝓝 (H y)) := by
-        exact tendsto_const_nhds.congr' h_ev.symm
-      exact h_lim_const
-    unfold H G at h_is_zero
-
-    exact sub_eq_zero.mp (h_is_zero x hx)
+  -- Final cleanup: Expand definitions back to the goal form
+  unfold diff G at h_is_zero
+  rw [Real.log_div (pow_ne_zero 2 hx.ne') (by positivity)]
+  exact sub_eq_zero.mp h_is_zero
 
 lemma hasDeriv_integral_sinc_sq_times_exp'(x : ℝ) (hx : 0 < x) : HasDerivAt (integral_sinc_sq_times_exp ) (1/4 * Real.log (x^2/(4+x^2))) x := by
   have h_deriv: HasDerivAt (integral_sinc_sq_times_exp) (integral_neg_sinc_sq_times_id_exp x) x := by
@@ -1506,406 +872,191 @@ lemma h_log_ineq_neg2 : ∀ y, -1<y → y <0 → Real.log (1 + y)/y ≤ 1/(1+y) 
   exact h_div
 
 theorem integral_sinc_sq_times_exp_eq (x : ℝ) (hx : 0 < x) :
-    integral_sinc_sq_times_exp x = x/4*Real.log (x^2/(4+x^2))+ Real.arctan (2/x) := by
-    let G := fun t => t/4*Real.log (t^2/(4+t^2))+ Real.arctan (2/t)
-    let H := fun t => integral_sinc_sq_times_exp t - G t
-    have G_diff:  ∀ y >0 , HasDerivAt G (1/4*Real.log (y^2/(4+y^2))) y := by
-      intro y hy
-      have h_log_deriv : HasDerivAt (fun t ↦ Real.log (t^2 / (4 + t^2))) (2/y - 2*y/(4+y^2)) y := by
+    integral_sinc_sq_times_exp x = x/4 * Real.log (x^2/(4+x^2)) + Real.arctan (2/x) := by
+  -- Define the candidate function G and the difference function 'diff'
+  let G := fun t ↦ t/4 * Real.log (t^2/(4+t^2)) + Real.arctan (2/t)
+  let diff := fun t ↦ integral_sinc_sq_times_exp t - G t
 
-        have : (fun t ↦ Real.log (t^2 / (4 + t^2))) =ᶠ[𝓝 y] (fun t ↦ 2 * Real.log t - Real.log (4 + t^2)) := by
-          filter_upwards [eventually_gt_nhds hy] with t ht
-          rw [Real.log_div (pow_ne_zero 2 ht.ne') (by positivity)]
-          rw [Real.log_pow]
-          rfl
+  -- Step 1: Verify the derivative of the candidate function G
+  -- We want to show that dG/dt matches the previously computed derivative of our integral
+  have hG : ∀ y ∈ Ioi 0, HasDerivAt G (1/4 * Real.log (y^2 / (4 + y^2))) y := by
+    intro y hy
+    have y_pos : 0 < y := mem_Ioi.mp hy
+    have den_ne : 4 + y^2 ≠ 0 := by nlinarith
+    unfold G
+    -- Use derivative rules for product (t * log), composition (log of fraction), and arctan(2/t)
+    convert (HasDerivAt.mul ((hasDerivAt_id y).div_const 4) (HasDerivAt.log ?_ ?_)).add (HasDerivAt.arctan ?_) using 1
+    rotate_left; rotate_left
+    · apply HasDerivAt.div
+      · apply HasDerivAt.pow (n:=2) (hasDerivAt_id y)
+      · apply HasDerivAt.const_add; apply HasDerivAt.pow (n:=2) (hasDerivAt_id y)
+      · nlinarith
+    · positivity[y_pos, den_ne]
+    rotate_left
+    · -- Derivative of arctan(2/y) which involves the chain rule on 2/y
+      convert (hasDerivAt_inv y_pos.ne').const_mul 2 using 1
+    -- Algebraic simplification to show the sum reduces to the log term only
+    dsimp; field_simp ; ring_nf
 
-        refine HasDerivAt.congr_of_eventuallyEq ?_ this
-        apply HasDerivAt.sub
-        · apply HasDerivAt.const_mul 2
-          have hy_neq: y≠0 := by
-            linarith
-          exact hasDerivAt_log hy_neq
-        · let f:= fun (t:ℝ)↦ 4 + t ^ 2
-          let f':= fun (t:ℝ)↦ 2*t
-          have hf_y: f y ≠ 0:= by
-            unfold f
-            have: 4+y^2>0:= by
-              nlinarith
-            linarith
-          have hf_deriv: HasDerivAt f (f' y) y:= by
-            unfold f f'
-            have: 2*y= 0 +2*y:= by
-              simp
-            rw[this]
-            apply HasDerivAt.add
-            · exact hasDerivAt_const y 4
-            · let h:= hasDerivAt_pow 2 y
-              simp at h
-              exact h
-          apply HasDerivAt.log hf_deriv hf_y
+  -- Step 2: Show that 'diff' is a constant function
+  -- Since deriv(integral) = hG, then deriv(diff) = 0
+  have h_deriv_zero : ∀ y ∈ Ioi 0, HasDerivAt diff 0 y := by
+    intro y hy
+    convert (hasDeriv_integral_sinc_sq_times_exp' y hy).sub (hG y hy) using 1; simp
 
-      have h_arctan_deriv : HasDerivAt (fun t ↦ Real.arctan (2/t)) ( -2/(4+y^2)) y := by
-        have h_neq_y: id y ≠ 0:= by
-          simp
-          linarith
-        have h := HasDerivAt.arctan (hasDerivAt_const y 2 |>.div (hasDerivAt_id y) h_neq_y)
-        simp at h
-        convert h using 1
-        field_simp [hy]
-        ring_nf
-
-      have h_prod_deriv : HasDerivAt (fun t:ℝ ↦ t / 4 * Real.log (t ^ 2 / (4 + t ^ 2))) (1 / 4 * Real.log (y ^ 2 / (4 + y ^ 2)) + (y / 4) * (2 / y - 2 * y / (4 + y ^ 2))) y := by
-        apply HasDerivAt.mul
-        · simp only [div_eq_inv_mul]
-          apply HasDerivAt.const_mul
-          exact hasDerivAt_id y
-        · exact h_log_deriv
-
-      have h_G_full := h_prod_deriv.add h_arctan_deriv
-      convert h_G_full using 1
-      field_simp [hy.ne.symm, (by nlinarith : 4 + y^2 ≠ 0)]
-      have: 4 + y ^ 2 - y ^ 2= (4:ℝ):= by
-        simp
-      rw[this]
-      ring_nf
-
-    have h_deriv_eq : ∀ y >0 ,
-      HasDerivAt integral_sinc_sq_times_exp (1 / 4 * Real.log (y ^ 2 / (4 + y ^ 2))) y ∧
-      HasDerivAt G (1 / 4 * Real.log (y ^ 2 / (4 + y ^ 2))) y := by
-        intro y hy
-        refine ⟨hasDeriv_integral_sinc_sq_times_exp' y hy, ?_⟩
-        exact G_diff y hy
-
-
-    have h_Hdiff : DifferentiableOn ℝ H (Set.Ioi 0) := by
-      intro y hy
-      have hF_diff : DifferentiableAt ℝ integral_sinc_sq_times_exp y :=
-    (hasDeriv_integral_sinc_sq_times_exp' y hy).differentiableAt
-      have hG : DifferentiableAt ℝ G y :=
-        (G_diff y hy).differentiableAt
-
-      exact (hF_diff.sub hG).differentiableWithinAt
-
-
-    have h_Hzero: ∀ y > 0, HasDerivAt (fun y =>H y) 0 y := by
-      intro y hy
-      have hF := (h_deriv_eq y hy).1
-      have hG := (h_deriv_eq y hy).2
-      simpa using hF.sub hG
-
-    have h_Hzero' : EqOn (deriv H) 0 (Set.Ioi 0) := by
-      intro y hy
-      have h := h_Hzero y hy
-      simpa using h.deriv
-
-    have hIoi_open : IsOpen (Set.Ioi (0 : ℝ)) :=
-      isOpen_Ioi
-
-    have hIoi_preconnected : IsPreconnected (Set.Ioi (0 : ℝ)) :=
-      isPreconnected_Ioi
-
-    have h_lim : Tendsto H atTop (𝓝 0) := by
-      have hF_lim : Tendsto integral_sinc_sq_times_exp atTop (𝓝 0) := by
-        let h:= tendsto_integral_sinc_sq_times_exp
-        exact h
-
-      have hG_lim : Tendsto G atTop (𝓝 0) := by
-        unfold G
-        have:  (𝓝 (0:ℝ))= (𝓝 ((0:ℝ)+(0:ℝ))):= by simp
-        simp_rw[this]
-        apply Tendsto.add
-        · let u := fun t:ℝ ↦ -4 / (4 + t^2)
-          have h_u : Tendsto u atTop (𝓝 0) := by
-            apply tendsto_const_nhds.div_atTop
-            apply tendsto_const_nhds.add_atTop
-            exact tendsto_pow_atTop (by norm_num)
-
-          have h_equiv : (fun t ↦ t / 4 * Real.log (t^2 / (4 + t^2))) =
+  -- Step 3: Handle the limit at infinity to determine the constant
+  -- we show that both terms → 0 as t → ∞
+  have h_lim_zero : Tendsto diff atTop (𝓝 0) := by
+    rw [← sub_zero (0 : ℝ)]
+    apply Tendsto.sub tendsto_integral_sinc_sq_times_exp
+    have hG_lim : Tendsto G atTop (𝓝 0) := by
+      unfold G
+      rw [show (0 : ℝ) = 0 + 0 by simp]
+      apply Tendsto.add
+      · -- Limit of the term t/4 * log(...)
+        -- We use an auxiliary variable u = -4/(4+t²) which tends to 0
+        let u := fun t:ℝ ↦ -4 / (4 + t^2)
+        have h_u : Tendsto u atTop (𝓝 0) := by
+          apply tendsto_const_nhds.div_atTop; apply tendsto_const_nhds.add_atTop; exact tendsto_pow_atTop (by norm_num)
+        -- Rewrite the expression to use the limit log(1+u)/u → 1
+        have h_equiv : (fun t ↦ t / 4 * Real.log (t^2 / (4 + t^2))) =
                      (fun t ↦ (t * (-4 / (4 + t^2)) / 4) * (Real.log (1 + u t) / u t)) := by
-            ext t
-            unfold u
-            field_simp
-            ring_nf
+            ext t ; unfold u ;field_simp ; ring_nf
+        rw [h_equiv]
+        rw [show (0 : ℝ) = 0 * 1 by simp]
+        apply Tendsto.mul
+        · -- The first part: t * u / 4 → 0: we use the Sandwich theorem
+          apply tendsto_of_tendsto_of_tendsto_of_le_of_le' (g := fun (x:ℝ) ↦ -1/x) (h := fun (x:ℝ) ↦ 0)
+          · simpa using (tendsto_const_nhds (x := (-1 : ℝ))).div_atTop tendsto_id
+          · exact tendsto_const_nhds
+          · filter_upwards [eventually_gt_atTop 0] with x hx; field_simp; nlinarith
+          · filter_upwards [eventually_gt_atTop 0] with x hx; field_simp; nlinarith
+        · -- The second part: log(1+u)/u → 1
+          -- This uses again the Sandwich theorem
+          -- with the logarithmic inequalities h_log_ineq_neg1 and h_log_ineq_neg2
+          apply tendsto_of_tendsto_of_tendsto_of_le_of_le' (g := fun x ↦ 1 - u x / 2) (h := fun x ↦ 1 / (1 + u x))
+          · simpa [h_u] using h_u.mul_const (-(1/2 : ℝ)) |>.const_add 1
+          · simpa [h_u] using (h_u.const_add (1 : ℝ)).inv₀ (by norm_num)
+          · -- Applying h_log_ineq_neg1
+            filter_upwards [h_u.eventually (eventually_gt_nhds (by norm_num : (-1/2 : ℝ) < 0)),
+                eventually_gt_atTop (0 : ℝ)] with x h_gt h_pos
+            have h_lt : u x < 0 := by unfold u; exact div_neg_of_neg_of_pos (by norm_num) (by nlinarith)
+            rw [le_div_iff_of_neg h_lt]
+            linarith [h_log_ineq_neg1 (u x) h_gt h_lt.le]
+          · -- Applying h_log_ineq_neg2
+            filter_upwards [h_u.eventually (eventually_gt_nhds (by norm_num : (-1: ℝ) < 0)),
+                  eventually_gt_atTop (0 : ℝ)] with x h_gt h_pos
+            have h_lt : u x < 0 := by unfold u; exact div_neg_of_neg_of_pos (by norm_num) (by nlinarith)
+            exact h_log_ineq_neg2 (u x) h_gt h_lt
+      · -- Limit of arctan(2/t) → arctan(0) = 0
+        simpa using Real.continuous_arctan.continuousAt.tendsto.comp (tendsto_const_nhds.div_atTop tendsto_id)
+    exact hG_lim
 
-          rw [h_equiv]
-          have: (𝓝 (0:ℝ ))= (𝓝 ((0:ℝ )*(1:ℝ ))):= by simp
-          rw[this]
-          apply Tendsto.mul
-          · field_simp
-            have: (𝓝 (0:ℝ )) = 𝓝 (-(0:ℝ)):= by simp
-            rw[this]
-            apply Tendsto.neg
-            apply tendsto_of_tendsto_of_tendsto_of_le_of_le' (f:= fun x:ℝ↦ x / (4 + x ^ 2)) (g := fun _ ↦ 0) (h:= fun x:ℝ ↦ x / x ^ 2)
-            · exact tendsto_const_nhds
-            · have h: 1<2 := by linarith
-              have:(fun x:ℝ ↦ x / x ^ 2)= fun x:ℝ ↦ x ^1 / x ^ 2:= by simp
-              simp_rw[this]
-              exact tendsto_pow_div_pow_atTop_zero (p:=1) (q:=2) h
-            · filter_upwards [eventually_gt_atTop 0] with x hx
-              positivity
-            · filter_upwards [eventually_gt_atTop 0] with x hx
-              field_simp
-              ring_nf
-              linarith
-          · let lower_x :=fun t:ℝ  ↦ 1-(u t)/2
-            let upper_x := fun t:ℝ  ↦ 1/(1+u t)
-            apply tendsto_of_tendsto_of_tendsto_of_le_of_le' (f:=fun x:ℝ↦  Real.log (1 + u x) / u x) (g:=lower_x) (h:= upper_x)
-            · unfold lower_x
-              have : (𝓝 (1:ℝ) )= (𝓝 ((1:ℝ)-(0:ℝ) )):= by simp
-              rw[this]
-              apply Tendsto.sub
-              · exact tendsto_const_nhds
-              · have : (𝓝 (0:ℝ) )= (𝓝 ((0:ℝ)/(2:ℝ) )):= by simp
-                rw[this]
-                apply Tendsto.div
-                · exact h_u
-                · exact tendsto_const_nhds
-                · linarith
-            · unfold upper_x
-              have : (𝓝 (1:ℝ) )= (𝓝 ((1:ℝ)/(1:ℝ) )):= by simp
-              rw[this]
-              apply Tendsto.div
-              · exact tendsto_const_nhds
-              · have : (𝓝 (1:ℝ) )= (𝓝 ((1:ℝ)  +(0:ℝ) )):= by simp
-                rw[this]
-                apply Tendsto.add
-                · exact tendsto_const_nhds
-                · exact h_u
-              linarith
-            · unfold lower_x
-              have h_eventually : ∀ᶠ t in atTop, -1/2 < u t := by
-                apply h_u.eventually
-                apply eventually_gt_nhds
-                linarith
-              have h_u_neg : ∀ᶠ b in atTop, u b < 0 := by
-                filter_upwards with b
-                unfold u
-                have : 0 < 4 + b^2 := by positivity
-                field_simp [this]
-                ring_nf
-                linarith
+  -- Step 4: Combine zero derivative and vanishing limit
+  -- Since the function is constant on (0, ∞) and tends to 0, it is zero everywhere
+  have h_const : ∀ y ∈ Ioi 0, diff y = diff x :=
+    fun y hy ↦ IsOpen.is_const_of_deriv_eq_zero isOpen_Ioi isPreconnected_Ioi
+      (fun z hz ↦ (h_deriv_zero z hz).differentiableAt.differentiableWithinAt)
+      (fun z hz ↦ (h_deriv_zero z hz).deriv) hy hx
 
-              have h_log_ineq : ∀ᶠ (b : ℝ) in atTop, 1 - u b / 2 ≤ Real.log (1 + u b) / u b := by
-                filter_upwards [h_eventually, h_u_neg] with b hb hb_neg
-                rw[le_div_iff_of_neg hb_neg]
+  have h_is_zero : diff x = 0 := by
+    refine tendsto_nhds_unique (tendsto_const_nhds.congr' ?_) h_lim_zero
+    filter_upwards [eventually_gt_atTop 0] with y hy
+    exact (h_const y hy).symm
 
-                have h := h_log_ineq_neg1 (u b) hb hb_neg.le
-                linarith
+  -- Step 5: Final conclusion
+  exact sub_eq_zero.mp h_is_zero
 
-              exact h_log_ineq
-            · unfold upper_x
-              have h_eventually : ∀ᶠ t in atTop, -1 < u t := by
-                apply h_u.eventually
-                apply eventually_gt_nhds
-                linarith
-              have h_u_neg : ∀ᶠ b in atTop, u b < 0 := by
-                filter_upwards with b
-                unfold u
-                have : 0 < 4 + b^2 := by positivity
-                field_simp [this]
-                ring_nf
-                linarith
-              filter_upwards [h_eventually,h_u_neg] with b hb_one hb_zero
-              have:= h_log_ineq_neg2 ( u b) hb_one hb_zero
-              exact this
+theorem integral_sinc_sq_eq_pi_div_two : ∫ t in Ioi 0, (Real.sinc t)^2 = π / 2 := by
 
-        · have h_inv : Tendsto (fun x:ℝ ↦ 2 / x) atTop (𝓝 0) := by
-            apply tendsto_const_nhds.div_atTop
-            exact tendsto_id
-          have h_cont : Tendsto Real.arctan (𝓝 0) (𝓝 (Real.arctan 0)) :=
-            Real.continuous_arctan.continuousAt.tendsto
-          rw [Real.arctan_zero] at h_cont
-          exact h_cont.comp h_inv
-
-      unfold H
-      have: (𝓝 (0:ℝ ))= (𝓝 ((0:ℝ )-(0:ℝ ))):= by simp
-      rw[this]
-      apply Tendsto.sub
-      · exact hF_lim
-      · exact hG_lim
-
-    have h_const : ∀ a ∈ Ioi 0, ∀ b ∈ Ioi 0, H a = H b := by
-      intro a ha
-      intro b hb
-      apply IsOpen.is_const_of_deriv_eq_zero hIoi_open hIoi_preconnected h_Hdiff h_Hzero' ha hb
-
-    have h_is_zero : ∀ y ∈ Ioi 0, H y = 0 := by
-      intro y hy
-      have h_ev : H =ᶠ[atTop] (fun _ ↦ H y) := by
-        filter_upwards [eventually_gt_atTop 0] with b hb
-        exact h_const b hb y hy
-      apply tendsto_nhds_unique _ h_lim
-      have h_lim_const : Tendsto H atTop (𝓝 (H y)) := by
-        exact tendsto_const_nhds.congr' h_ev.symm
-      exact h_lim_const
-    unfold H G at h_is_zero
-
-    exact sub_eq_zero.mp (h_is_zero x hx)
-
-theorem integral_sinc_sq_eq_pi_div_two :
-    ∫ t in Ioi 0, (sinc t)^2 = π / 2 := by
-  have h_lim_int : Tendsto (fun x => integral_sinc_sq_times_exp x) (𝓝[>] 0) (𝓝 (∫ t in Ioi 0, (sinc t)^2)) := by
-    refine tendsto_integral_filter_of_dominated_convergence (fun t => (Real.sinc t)^2) ?_ ?_ ?_ ?_
-    · filter_upwards [self_mem_nhdsWithin] with x (hx : 0 < x)
-      apply ContinuousOn.aestronglyMeasurable
+  -- Step 1: Use the Dominated Convergence Theorem (DCT) to show that
+  -- as x → 0⁺, ∫ sinc²(t) e⁻ˣᵗ dt converges to the target integral ∫ sinc²(t) dt
+  have h_lim_int : Tendsto (fun x => integral_sinc_sq_times_exp x) (𝓝[>] 0) (𝓝 (∫ t in Ioi 0, (Real.sinc t)^2)) := by
+    -- Dominating function is sinc²(t), which we already proved is integrable.
+    refine tendsto_integral_filter_of_dominated_convergence (fun t => (Real.sinc t)^2) ?_ ?_ integrable_sinc_sq ?_
+    · -- Measurability of the family of functions
+      filter_upwards [self_mem_nhdsWithin] with x hx
+      exact (Real.continuous_exp.comp (continuous_const.mul continuous_id') |>.mul (Real.continuous_sinc.pow 2)).aestronglyMeasurable
+    · -- Domination: |sinc²(t) * exp(-xt)| ≤ sinc²(t) for x > 0 and t > 0
+      filter_upwards [self_mem_nhdsWithin] with x hx
       unfold sinc_sq_times_exp
-      apply ContinuousOn.mul
-      · apply Continuous.continuousOn
-        apply Continuous.rexp
-        continuity
-      · apply Continuous.continuousOn
-        apply Continuous.pow
-        exact Real.continuous_sinc
-      · exact measurableSet_Ioi
-    · filter_upwards [self_mem_nhdsWithin] with u (hu : 0 < u)
       rw [ae_restrict_iff' measurableSet_Ioi]
-      refine ae_of_all _ (fun t (ht : 0 < t) => ?_)
-      unfold sinc_sq_times_exp
-      rw [norm_mul, Real.norm_eq_abs, Real.norm_eq_abs]
-      rw [abs_of_nonneg (exp_pos _).le]
-      simp
+      refine ae_of_all _ (fun t (ht : 0 < t) ↦ ?_)
+      rw [norm_mul, Real.norm_eq_abs, Real.norm_eq_abs, abs_of_nonneg (exp_pos _).le, abs_of_nonneg (sq_nonneg (Real.sinc t))]
       refine mul_le_of_le_one_left (sq_nonneg _) ?_
       rw [exp_le_one_iff]
+      replace hx : 0 < x := hx
       nlinarith
-    ·exact integrable_sinc_sq
-    · rw [ae_restrict_iff' measurableSet_Ioi]
-      refine ae_of_all _ (fun t (ht : 0 < t) => ?_)
+    · -- Point-wise convergence: exp(-xt) → 1 as x → 0, so the integrand converges to sinc²(t)
       unfold sinc_sq_times_exp
-      have : 𝓝 (sinc t ^ 2)= 𝓝 (1*sinc t ^ 2):= by simp
-      rw[this]
-      apply Tendsto.mul
-      · apply (tendsto_exp_nhds_zero_nhds_one.comp ?_)
-        have h0 : Tendsto (fun n:ℝ
-           ↦ n) (𝓝[>] 0) (𝓝 0) :=
-          tendsto_id.mono_left nhdsWithin_le_nhds
-        have: 𝓝 ( 0:ℝ ) = 𝓝 (-0 * t):= by simp
-        rw[this]
-        exact h0.neg.mul_const t
-      · exact tendsto_const_nhds
+      rw [ae_restrict_iff' measurableSet_Ioi]
+      refine ae_of_all _ (fun t (ht : 0 < t) ↦ ?_)
+      have h_cont : Continuous (fun n ↦ rexp (-n * t) * Real.sinc t ^ 2) := by continuity
+      simpa using (h_cont.tendsto 0).mono_left nhdsWithin_le_nhds
+
+  -- Step 2: Use the analytical expression x/4 * log(x²/(4+x²)) + arctan(2/x)
+  -- to compute the limit as x → 0⁺.
   have h_lim_int2 : Tendsto (fun x ↦ integral_sinc_sq_times_exp x) (𝓝[>] 0) (𝓝 (π / 2)) := by
-    refine (tendsto_congr' (f₁ := fun x ↦ integral_sinc_sq_times_exp x) (f₂ := fun x ↦ (x / 4) * Real.log (x^2 / (4 + x^2)) + Real.arctan (2 / x)) ?_).mpr ?_
-    · filter_upwards [self_mem_nhdsWithin] with x hx
-      exact integral_sinc_sq_times_exp_eq x hx
-    · have h_lim_arctan : Tendsto (fun x:ℝ ↦ Real.arctan (2 / x)) (𝓝[>] (0:ℝ)) (𝓝 ((π:ℝ ) / 2)) := by
-        have h_atTop : Tendsto (fun x:ℝ  ↦ 2 / x) (𝓝[>] 0) atTop := by
-          have h_rewrite : (fun x:ℝ ↦ 2 / x) = (fun x ↦ 2 * (1 / x)) := by
-            ext x
-            ring_nf
-          rw [h_rewrite]
-          apply Tendsto.const_mul_atTop (by norm_num : (0 : ℝ) < 2)
-          simp[HDiv.hDiv,  Div.div,  DivInvMonoid.div']
-          exact tendsto_inv_nhdsGT_zero
-        exact (Real.tendsto_arctan_atTop.comp h_atTop).mono_right nhdsWithin_le_nhds
-      have h_lim_log : Tendsto (fun x ↦ (x / 4) * Real.log (x^2 / (4 + x^2))) (𝓝[>] 0) (𝓝 0) := by
-        let g := fun x:ℝ ↦ (1 / 2) * (x * Real.log x) - (x / 4) * Real.log (4 + x^2)
-        refine (tendsto_congr' (f₁ := fun x:ℝ ↦ (x / 4) * Real.log (x^2 / (4 + x^2))) (f₂ := g) ?_).mpr ?_
+    -- Replace the integral with the analytical formula proven in integral_sinc_sq_times_exp_eq
+    refine (tendsto_congr' (f₁ := integral_sinc_sq_times_exp)
+      (f₂ := fun x ↦ (x / 4) * Real.log (x^2 / (4 + x^2)) + Real.arctan (2 / x)) ?_).mpr ?_
+    · filter_upwards [self_mem_nhdsWithin] with x hx using integral_sinc_sq_times_exp_eq x hx
+    · -- The limit of the sum is 0 + π/2
+      rw [show (π / 2 : ℝ) = 0 + π / 2 by simp]
+      apply Tendsto.add
+      · -- Limit of the term (x/4) * log(x² / (4+x²)) as x → 0⁺
+        refine (tendsto_congr' (f₂ := fun x ↦ (1/2) * (x * Real.log x) - (x/4) * Real.log (4 + x^2)) ?_).mpr ?_
         · filter_upwards [self_mem_nhdsWithin] with x (hx : 0 < x)
-          have hx_ne : x ≠ 0 := hx.ne'
-          have hx_sq_ne : x^2 ≠ 0 := by nlinarith
-          have h_pos :  4 + x^2≠ 0 := by linarith [pow_two_nonneg x]
-          rw [Real.log_div hx_sq_ne h_pos, Real.log_pow, mul_sub]
-          ring
-        · unfold g
-          have: (𝓝 (0:ℝ))= (𝓝 (0-0:ℝ)):= by
-            simp
-          rw[this]
+          rw [Real.log_div (pow_ne_zero 2 hx.ne') (by positivity), Real.log_pow]; ring
+        · rw [show (0 : ℝ) = (1/2) * 0 - (0/4) * Real.log 4 by simp]
           apply Tendsto.sub
-          · have h_zero : (0 : ℝ) = (1 / 2) * 0 := by simp
-            rw [h_zero]
+          · -- The x * log(x) term tends to 0 as x → 0⁺
             apply Tendsto.mul
             · exact tendsto_const_nhds
-            · let g := fun u ↦ Real.exp (-u) * Real.log (Real.exp (-u))
-              have h_comp : Tendsto g atTop (𝓝 0) := by
-                have h_g_eq : ∀ u, g u = - (u * Real.exp (-u)) := by
-                  intro u
-                  simp [g]
-                  ring
-                have h_growth := Real.tendsto_pow_mul_exp_neg_atTop_nhds_zero 1
-                simp at h_growth
-                have : Tendsto (fun u ↦ - (u * Real.exp (-u))) atTop (𝓝 (-0)) :=
-                  h_growth.neg
-                simp at this
-                rw [funext h_g_eq]
-                exact this
-              simp
-              have h_final : Tendsto (fun x ↦ g (- Real.log x)) (𝓝[>] 0) (𝓝 0) := by
-                apply h_comp.comp
-                have h_log := Real.tendsto_log_nhdsGT_zero
-                exact tendsto_neg_atBot_atTop.comp h_log
-              unfold g at h_final
-              simp at h_final
-              refine (tendsto_congr' ?_).mp h_final
-              filter_upwards [self_mem_nhdsWithin] with x hx
-              rw [Real.exp_log hx]
-          · have: (𝓝 (0:ℝ))= (𝓝 (0*    Real.log 4)):= by simp
-            rw[this]
+            · -- change of variable: The u= log(x): x *log x= u * exp u
+              let f := fun x ↦ - ((- Real.log x) * Real.exp (Real.log x))
+              refine (tendsto_congr' (f₂ := f) ?_).mpr ?_
+              · filter_upwards [self_mem_nhdsWithin] with x hx; simp [f]
+                have hx0 : 0 < x := by simpa using hx
+                rw [mul_comm, Real.exp_log hx0 ]
+              · -- Using the growth comparison: u * exp(u) → 0 as u → -∞
+                unfold f
+                ring_nf
+                have h_ueu : Tendsto (fun u ↦ u * rexp u) atBot (𝓝 0) := by
+                  simpa [Function.comp_def] using (tendsto_pow_mul_exp_neg_atTop_nhds_zero 1).neg.comp tendsto_neg_atBot_atTop
+                simpa [Function.comp_def] using h_ueu.comp Real.tendsto_log_nhdsGT_zero
+          · -- The (x/4) * log(4 + x²) term tends to 0 as x → 0
             apply Tendsto.mul
-            · apply   tendsto_nhdsWithin_of_tendsto_nhds
-              have h_cont : Continuous (fun x : ℝ ↦ x / 4) := by
-                exact continuous_id.div_const (4:ℝ )
-              have h_lim := h_cont.tendsto 0
-              simp at h_lim
-              exact h_lim
-            · apply   tendsto_nhdsWithin_of_tendsto_nhds
-              apply Tendsto.log
-              · have h_cont : Continuous (fun x:ℝ ↦ 4 + x ^ 2) := by
-                  apply Continuous.add
-                  exact continuous_const
-                  apply Continuous.pow
-                  continuity
-                have h_lim := h_cont.tendsto 0
-                simp at h_lim
-                exact h_lim
-              · linarith
-      have h_somme := h_lim_log.add h_lim_arctan
-      simp at h_somme
-      exact h_somme
+            · ring_nf ; simpa using (continuous_id.mul (continuous_const (y := (4 : ℝ)⁻¹))).tendsto 0 |>.mono_left nhdsWithin_le_nhds
+            · ring_nf
+              have h_cont : Continuous (fun x : ℝ ↦ Real.log (4 + x^2)) := (continuous_const.add (continuous_id.pow 2)).log (fun x ↦ by nlinarith)
+              simpa using (h_cont.tendsto 0).mono_left nhdsWithin_le_nhds
+      · -- Limit of arctan(2/x) as x → 0⁺ is π/2
+        -- Since 2/x → +∞, arctan(2/x) → π/2
+        have h_div : Tendsto (fun x : ℝ ↦ 2 / x) (𝓝[>] 0) atTop := tendsto_inv_nhdsGT_zero.const_mul_atTop (by norm_num : (0 : ℝ) < 2)
+        simpa [Function.comp_def] using (tendsto_arctan_atTop.comp h_div).mono_right nhdsWithin_le_nhds
+
+  -- Step 3: By uniqueness of limits, the integral equals π/2
   exact tendsto_nhds_unique h_lim_int h_lim_int2
 
 lemma h_lim_T: Tendsto (fun T ↦ (sinc (T / 2))^2 * (T / 2)) (atTop : Filter ℝ) (𝓝 0) := by
-  let FilterT := (atTop : Filter ℝ)
-  let g := fun t ↦ (sinc t)^2 * t
-  let f:= fun (T:ℝ) ↦ T / 2
-  have h_comp : Tendsto (fun (T:ℝ) ↦ T / 2) FilterT FilterT := by
-    let c : ℝ := 1/2
-    have hc : 0 < c := by norm_num
-    have h_eq : (fun( T:ℝ) ↦ T / 2) = (fun T ↦ T * c) := by
-      unfold c; ext; field_simp;
-    rw[h_eq]
-    apply tendsto_id.atTop_mul_const hc
-  have: (fun a ↦ sinc (a / 2) ^ 2 * (a / 2)) = fun a ↦ (g∘ f) a:= by
-    unfold f g
-    simp
-  rw[this]
-  refine Tendsto.comp (y := atTop) ?_ h_comp
-  unfold g
-  exact limit_sinc_sq_mul_self_atTop
+  have h_inner : Tendsto (fun T : ℝ ↦ T / 2) atTop atTop := tendsto_id.atTop_mul_const (by norm_num : (0 : ℝ) < 2⁻¹)
+  simpa [Function.comp_def] using limit_sinc_sq_mul_self_atTop.comp h_inner
 
-
-theorem integral_dirichlet :
-    Tendsto (fun T: ℝ ↦(∫ t in 0..T, Real.sinc t))  (atTop : Filter ℝ) (𝓝 (π/2)):= by
-  have h_eq : ∀ᶠ T in atTop, (∫ t in 0..T, Real.sinc t) =
-      (∫ t in 0..T/2, (Real.sinc t)^2) + (Real.sinc (T/2))^2 * (T/2) := by
+theorem integral_dirichlet : Tendsto (fun T ↦ ∫ t in 0..T, sinc t) atTop (𝓝 (π / 2)) := by
+  -- Step 1: Replace the integral of sinc with the identity involving the integral of sinc²
+  -- We use the identity: ∫₀ᵀ sinc(t) dt = ∫₀ᵀ/² sinc²(t) dt + sinc(T/2)² * (T/2)
+  refine Tendsto.congr' (f₁ := fun T:ℝ ↦ (∫ t in 0..T/2, (Real.sinc t)^2) + (Real.sinc (T/2))^2 * (T/2)) ?_ ?_
+  · -- This identity holds for all T > 0
     filter_upwards [eventually_gt_atTop 0] with T hT
-    exact integral_sinc_zero_T T hT
-  rw [tendsto_congr' h_eq]
-  have: 𝓝 (π / 2)= (𝓝 (π / 2+0)):= by simp
-  rw[this]
-  apply Tendsto.add
-  · have h_comp : Tendsto (fun T:ℝ ↦ T / 2) atTop atTop := by
-      simp_rw[div_eq_mul_inv]
-      apply tendsto_id.atTop_mul_const
-      linarith
-    have h_int_lim : Tendsto (fun x ↦ ∫ t in 0..x/2, (sinc t)^2) atTop (𝓝 (∫ t in Ioi 0, (sinc t)^2)) := MeasureTheory.intervalIntegral_tendsto_integral_Ioi 0 integrable_sinc_sq h_comp
-    rw[integral_sinc_sq_eq_pi_div_two] at h_int_lim
-    exact h_int_lim
-  · exact h_lim_T
-
-noncomputable def DirichletSin : ℝ → ℝ :=
-  fun x↦1/2 + 1/π * ∫ t in  (0).. (x), sinc t
-
-noncomputable def HeavisidePerso (x : ℝ) : ℝ :=
-  if x > 0 then 1 else if x = 0 then 1/2 else 0
+    rw [integral_sinc_zero_T T hT]
+  · -- Step 2: Evaluate the limit as T → ∞
+    -- The target value is π/2 + 0
+    rw [← add_zero (π / 2), ← integral_sinc_sq_eq_pi_div_two]
+    -- 1. The integral part: ∫₀ᵀ/² sinc²(t) dt converges to the improper integral over Ioi 0
+    -- as T/2 → ∞.
+    exact (MeasureTheory.intervalIntegral_tendsto_integral_Ioi 0 integrable_sinc_sq
+      (tendsto_id.atTop_mul_const (by norm_num))).add h_lim_T
 
 lemma HeavisideNorm_le_one : ∀ a:ℝ, ‖HeavisidePerso  a‖ ≤ 1 := by
   unfold HeavisidePerso
@@ -1915,75 +1066,41 @@ lemma HeavisideNorm_le_one : ∀ a:ℝ, ‖HeavisidePerso  a‖ ≤ 1 := by
   ·norm_num
   ·norm_num
 
-
-theorem lim_S_Rx (x : ℝ) : Tendsto (fun R : ℝ ↦   DirichletSin (R * x)) atTop (𝓝 (HeavisidePerso x)) := by
+theorem lim_S_Rx (x : ℝ) : Tendsto (fun R ↦ DirichletSin (R * x)) atTop (𝓝 (HeavisidePerso x)) := by
   unfold DirichletSin HeavisidePerso
-  split_ifs with hx hx0
-  · -- Case x > 0
-    have h_limit : Tendsto (fun R : ℝ ↦ R * x) atTop atTop :=
-      tendsto_id.atTop_mul_const hx
+  -- Split into three cases for x: x < 0, x = 0, and x > 0
+  rcases lt_trichotomy x 0 with hx | rfl | hx
+  · simp [hx, hx.ne, not_lt_of_lt hx]
+    -- it suffices that the integral part tends to -π/2
+    suffices Tendsto (fun R ↦ ∫ t in 0..R*x, sinc t) atTop (𝓝 (-π/2)) by
+      convert (this.const_mul (1/π)).const_add (1/2) using 2
+      ·field_simp
+      · field_simp
+        ring_nf
 
-    have h_int : Tendsto (fun R : ℝ ↦ ∫ t in (0)..(R * x), Real.sinc t) atTop (𝓝 (π/2)) :=
-      integral_dirichlet.comp h_limit
-    have : Tendsto (fun R : ℝ ↦ 1/2 + 1/π * ∫ t in (0)..(R * x), Real.sinc t) atTop (𝓝 (1/2 + 1/π * (π/2))) := by
-      apply tendsto_const_nhds.add
-      apply tendsto_const_nhds.mul h_int
-    have h_simp: (𝓝 (1 / 2 + 1 / π * (π / 2)))= 𝓝 (1:ℝ):= by
-      field_simp
-      simp
-    rw[h_simp] at this
-    exact this
-
-  · -- Case x = 0
-    simp [hx0]
-
-  · -- Case x < 0
-    -- Here R * x → -∞.The integral from 0 to -∞ is the opposite of  The integral from 0 to +∞ is
-    have hx_neg : x < 0 := by
-      simp at hx
-      simp at hx0
-      exact lt_of_le_of_ne hx hx0
-
-    have h_limit : Tendsto (fun R : ℝ ↦ R * x) atTop atBot :=
-      tendsto_id.atTop_mul_const_of_neg hx_neg
-
-
-    have h_int_antisym : ∀ T, ∫ t in (0)..T, Real.sinc t = - ∫ t in (0)..(-T), Real.sinc t := by
-      have h_int_sinc_sym: ∀ T, ∫ t in (0)..T, Real.sinc t=  ∫ t in (0)..T, Real.sinc (-t):= by
-        intro T
-        congr
-        funext t
-        simp[Real.sinc_neg]
-
-      intro T
-      rw[h_int_sinc_sym]
-      rw [intervalIntegral.integral_comp_neg (fun t ↦ Real.sinc t)]
-      simp
-      rw [intervalIntegral.integral_symm]
-
-    have h_dirichletBot: Tendsto (fun T ↦ ∫ t in 0..T, Real.sinc t) atBot (𝓝 (-π/2)) := by
-
-      have h := integral_dirichlet.comp tendsto_neg_atBot_atTop
-      simp only [Function.comp_def] at h
-      have h_final := h.neg
-      simp only [← h_int_antisym] at h_final
-      have: 𝓝 (-(π / 2))= 𝓝 (-π / 2):= by field_simp
-      rw[this] at h_final
-      exact h_final
-
-
-    have h_integral_limit : Tendsto (fun R ↦ ∫ t in 0..R * x, Real.sinc t) atTop (𝓝 (-π / 2)) :=
-  h_dirichletBot.comp h_limit
-    have: (𝓝 (0:ℝ))= 𝓝 ((1/2:ℝ)- (1/2:ℝ)) := by simp
-    rw[this]
-    apply Tendsto.add
-    apply tendsto_const_nhds
-
-    have: (𝓝 (-(1 / 2) :ℝ))= 𝓝 ((1/π :ℝ)*(-π/2:ℝ)) := by field_simp
-    rw[this]
-    apply Tendsto.mul
-    apply tendsto_const_nhds
-    exact h_integral_limit
+    -- Since x < 0 and R → ∞, the upper bound R*x → -∞.
+    -- We use the change of variable t ↦ -t to transform this into the standard Dirichlet integral.
+    have h_lim_pos : Tendsto (fun R ↦ - (R * x)) atTop atTop := tendsto_neg_atBot_atTop.comp (tendsto_id.atTop_mul_const_of_neg hx)
+    convert (integral_dirichlet.comp h_lim_pos).neg using 1
+    · ext R
+      dsimp only [Function.comp_apply, neg_mul_eq_mul_neg]
+      -- Use the property that sinc is an even function: sinc(-t) = sinc(t)
+      rw [← neg_neg (R * x),show (0 : ℝ) = -0 by simp, ← intervalIntegral.integral_comp_neg (fun t ↦ sinc t), neg_zero]
+      simp only [sinc_neg]
+      rw [intervalIntegral.integral_symm, neg_neg (R * x)]
+    · ring_nf
+  · -- Case x = 0: DirichletSin(0) is defined as 1/2
+    simp
+  · -- Case x > 0: The limit is 1
+    simp [hx]
+    -- it suffices that the integral part tends to -π/2
+    suffices Tendsto (fun R ↦ ∫ t in 0..R*x, sinc t) atTop (𝓝 (π/2)) by
+      convert (this.const_mul (1/π)).const_add (1/2) using 2
+      ·field_simp
+      · field_simp
+        ring_nf
+    -- Since x > 0, R*x → ∞, so we simply compose the previously proven integral_dirichlet
+    convert integral_dirichlet.comp (tendsto_id.atTop_mul_const hx) using 2
 
 lemma DirichletSin_continuous : Continuous fun u ↦ DirichletSin (u):= by
   unfold DirichletSin
@@ -2018,241 +1135,76 @@ lemma DirichletSin_continuous_comp (T:ℝ)(t:ℝ):Continuous fun x ↦ (Dirichle
         apply continuous_const
       exact this
 
+theorem DirichletSinBounded:  ∃ M, ∀ y, |DirichletSin y| ≤ M := by
+  -- Step 1: Prove the function converges to 1 at +∞
+  have h_lim_top : Tendsto DirichletSin atTop (𝓝 1) := by
+    convert integral_dirichlet.const_mul (1/π) |>.const_add (1/2) using 1
+    field_simp [Real.pi_ne_zero]; ring
 
-theorem DirichletSinBoundedComp(T t: ℝ ) (hT: T≥ 0):  ∃ C:ℝ, ∀ x, |DirichletSin (T * (x - t))| ≤ C := by
-    by_cases hT_z: T=0
-    · unfold DirichletSin
-      simp[hT_z]
-      use (1:ℝ)
-      linarith
-    · have h_cont_v:= DirichletSin_continuous_comp T t
-
-      have h_lim_top : Tendsto (fun x↦ DirichletSin (T * (x - t))) atTop (𝓝 1) := by
-        have h_limit : Tendsto (fun R : ℝ ↦ T * (R - ↑t)) atTop atTop := by
-          have h_rw : (fun R : ℝ ↦ T * (R - ↑t))= (fun R : ℝ ↦T*R -T*↑t):= by
-            funext R
-            ring_nf
-          rw[h_rw]
-          apply tendsto_atTop_add_const_right (f:= fun R : ℝ ↦ T * R )
-          have:  (fun R ↦ T * R) =  (fun R ↦ R * T) := by
-            funext R
-            ring_nf
-          rw[this]
-          apply Tendsto.atTop_mul_const
-          have: 0≠ T := by
-            push_neg at hT_z
-            exact hT_z.symm
-          exact lt_of_le_of_ne hT this
-          exact tendsto_id
-
-        have h_int_dir:=integral_dirichlet.comp h_limit
-        unfold DirichletSin
-        have: (𝓝 1)=𝓝 (1/2 + 1/π * (π/2)):= by
-          field_simp
-          ring_nf
-        rw[this]
-        apply tendsto_const_nhds.add
-        apply tendsto_const_nhds.mul
-        exact h_int_dir
-
-      have h_lim_bot : Tendsto (fun x↦ DirichletSin (T * (x - t))) atBot (𝓝 (0)) := by
-        unfold DirichletSin
-
-        have h_limit : Tendsto (fun R : ℝ ↦ T * (R - ↑t)) atBot atBot := by
-          have h_rw : (fun R : ℝ ↦ T * (R - ↑t))= (fun R : ℝ ↦T*R -T*↑t):= by
-            funext R
-            ring_nf
-          rw[h_rw]
-          apply tendsto_atBot_add_const_right (f:= fun R : ℝ ↦ T * R )
-          have:  (fun R ↦ T * R) =  (fun R ↦ R * T) := by
-            funext R
-            ring_nf
-          rw[this]
-          apply Tendsto.atBot_mul_const
-          have: 0≠ T := by
-            push_neg at hT_z
-            exact hT_z.symm
-          exact lt_of_le_of_ne hT this
-          exact tendsto_id
-        have h_int_antisym : ∀ T, ∫ t in (0)..T, Real.sinc t = - ∫ t in (0)..(-T), Real.sinc t := by
-          have h_int_sinc_sym: ∀ T, ∫ t in (0)..T, Real.sinc t=  ∫ t in (0)..T, Real.sinc (-t):= by
-            intro T
-            congr
-            funext t
-            simp[Real.sinc_neg]
-          intro T
-          rw[h_int_sinc_sym]
-          rw [intervalIntegral.integral_comp_neg (fun t ↦ Real.sinc t)]
-          simp
-          rw [intervalIntegral.integral_symm]
-
-        have h_dirichletBot: Tendsto (fun T ↦ ∫ t in 0..T, Real.sinc t) atBot (𝓝 (-π/2)) := by
-          have h := integral_dirichlet.comp tendsto_neg_atBot_atTop
-          simp only [Function.comp_def] at h
-          have h_final := h.neg
-          simp only [← h_int_antisym] at h_final
-          have: 𝓝 (-(π / 2))= 𝓝 (-π / 2):= by field_simp
-          rw[this] at h_final
-          exact h_final
-        have h_integral_limit : Tendsto (fun R ↦ ∫ t in 0..T * (R - ↑t), Real.sinc t) atBot (𝓝 (-π / 2)) :=
-          h_dirichletBot.comp h_limit
-        have: (𝓝 (0:ℝ))= 𝓝 ((1/2:ℝ)- (1/2:ℝ)) := by simp
-        rw[this]
-        apply Tendsto.add
-        apply tendsto_const_nhds
-
-        have: (𝓝 (-(1 / 2) :ℝ))= 𝓝 ((1/π :ℝ)*(-π/2:ℝ)) := by field_simp
-        rw[this]
-        apply Tendsto.mul
-        apply tendsto_const_nhds
-        exact h_integral_limit
-      have h_norm_lim := h_lim_bot.norm
-      have: (𝓝 ‖(0:ℝ)‖)= (𝓝 0):= by simp
-      rw[this] at h_norm_lim
-      rw [Metric.tendsto_atTop] at h_lim_top
-      obtain ⟨R_top, hR_top⟩ := h_lim_top 1 zero_lt_one
-      have h_v_lt : ∀ᶠ (x : ℝ) in atBot, ‖(fun x↦ DirichletSin (T * (x - t))) x‖ < 1 :=
-  Filter.Tendsto.eventually_lt_const zero_lt_one h_norm_lim
-      obtain ⟨R_bot, hR_bot_forall⟩ := Filter.mem_atBot_sets.1 h_v_lt
-      let a := min R_bot R_top
-      let b := max R_bot R_top
-      have h_subset : Set.Icc a b ⊆ Set.Icc a b := rfl.subset
-      have h_cont_on : ContinuousOn (fun x↦ DirichletSin (T * (x - t))) (Set.Icc a b) := h_cont_v.continuousOn
-      have h_img_compact : IsCompact ((fun x↦ DirichletSin (T * (x - t))) '' Set.Icc a b) := isCompact_Icc.image h_cont_v
-      have h_img_bdd : Bornology.IsBounded ((fun x↦ DirichletSin (T * (x - t))) '' Set.Icc a b) :=
-  h_img_compact.isBounded
-      obtain ⟨M, hM_pos, hM⟩ := Bornology.IsBounded.exists_pos_norm_le h_img_bdd
-      use max M 2
-      intro x
-      rw [← Real.norm_eq_abs]
-      rcases lt_trichotomy x a with (hx_lt_a | hx_mid_or_right)
-      · have hx_bot : x ≤ R_bot := le_trans (le_of_lt hx_lt_a) (min_le_left _ _)
-        have h_mem := hR_bot_forall x hx_bot
-        have h_lt : ‖(fun x↦ DirichletSin (T * (x - t))) x‖ < 1 := h_mem
-        apply le_trans _ (le_max_right M 2)
-        apply le_trans (le_of_lt h_lt)
-        linarith
-      · by_cases hxb : x∈ Icc a b
-        · have h_vx_mem : (fun x↦ DirichletSin (T * (x - t))) x ∈ (fun x↦ DirichletSin (T * (x - t))) '' Icc a b := mem_image_of_mem (fun x↦ DirichletSin (T * (x - t))) hxb
-          have h_le_M : ‖(fun x↦ DirichletSin (T * (x - t))) x‖ ≤ M := hM ((fun x↦ DirichletSin (T * (x - t))) x) h_vx_mem
-          exact h_le_M.trans (le_max_left M 2)
-        · have hax : a ≤ x := hx_mid_or_right.elim (fun h => h.symm.le) (fun h => h.le)
-          have h_x_gt_b : x > b := by
-            rw [mem_Icc, not_and_or] at hxb
-            cases hxb with
-              | inl h_lt_a => exact (h_lt_a hax).elim
-              | inr h_gt_b => exact not_le.mp h_gt_b
-          have h_x_gt_Rtop : x > R_top :=by
-            have h_b_ge : b ≥ R_top := le_max_right R_bot R_top
-            linarith
-          have h_dist : dist ((fun x↦ DirichletSin (T * (x - t))) x) 1 < 1 := hR_top x (le_of_lt h_x_gt_Rtop)
-          rw [dist_eq_norm] at h_dist
-          have h_norm_2 : ‖(fun x↦ DirichletSin (T * (x - t))) x‖ < 2 := by
-            calc ‖(fun x↦ DirichletSin (T * (x - t))) x‖ = ‖((fun x↦ DirichletSin (T * (x - t))) x - 1) + 1‖ := by ring_nf
-              _ ≤ ‖(fun x↦ DirichletSin (T * (x - t))) x - 1‖ + ‖(1 : ℝ)‖ := norm_add_le _ _
-              _ < 1 + 1 := by
-                simp
-                rw[←Real.norm_eq_abs]
-                exact h_dist
-              _ = 2 := by ring_nf
-          apply le_trans _ (le_max_right M 2)
-          exact le_of_lt h_norm_2
-
-theorem DirichletSinBounded:  ∃ C:ℝ, ∀ u, |DirichletSin (u)| ≤ C := by
-  have h_cont_v:= DirichletSin_continuous
-  have h_lim_top : Tendsto (fun u↦ DirichletSin (u)) atTop (𝓝 1) := by
-    have hdirichlet_integral:=integral_dirichlet
-    unfold DirichletSin
-    have: (𝓝 (1:ℝ))= (𝓝 ((1/2:ℝ) + 1/π*(π/2))):= by
-      field_simp
+  -- Step 2: Prove the function converges to 0 at -∞
+  have h_lim_bot : Tendsto DirichletSin atBot (𝓝 0) := by
+    let f_sym := fun u ↦ 1/2 + 1/π * (- ∫ t in 0..-u, sinc t)
+    refine Tendsto.congr' (f₁ := f_sym) ?_ ?_
+    · filter_upwards with u
+      unfold DirichletSin f_sym
+      rw [show (0 : ℝ) = -0 by simp, ← intervalIntegral.integral_comp_neg Real.sinc, show (-0 : ℝ) = 0 by simp]
+      simp only [Real.sinc_neg, neg_zero]
+      rw [intervalIntegral.integral_symm]
       ring_nf
-    rw[this]
-    apply tendsto_const_nhds.add
-    apply tendsto_const_nhds.mul hdirichlet_integral
+    · convert (integral_dirichlet.comp tendsto_neg_atBot_atTop).neg.const_mul _ |>.const_add _ using 1
+      field_simp [Real.pi_ne_zero]; ring
 
-  have h_lim_bot : Tendsto (fun u↦ DirichletSin u) atBot (𝓝 (0)) := by
-    unfold DirichletSin
-    have h_dirichletBot: Tendsto (fun T ↦ ∫ t in 0..T, Real.sinc t) atBot (𝓝 (-π/2)) := by
-      have h := integral_dirichlet.comp tendsto_neg_atBot_atTop
-      simp only [Function.comp_def] at h
-      have h_final := h.neg
-      have h_int_antisym : ∀ T, ∫ t in (0)..T, Real.sinc t = - ∫ t in (0)..(-T), Real.sinc t := by
-          have h_int_sinc_sym: ∀ T, ∫ t in (0)..T, Real.sinc t=  ∫ t in (0)..T, Real.sinc (-t):= by
-            intro T
-            congr
-            funext t
-            simp[Real.sinc_neg]
-          intro T
-          rw[h_int_sinc_sym]
-          rw [intervalIntegral.integral_comp_neg (fun t ↦ Real.sinc t)]
-          simp
-          rw [intervalIntegral.integral_symm]
-      simp only [← h_int_antisym] at h_final
-      have: 𝓝 (-(π / 2))= 𝓝 (-π / 2):= by field_simp
-      rw[this] at h_final
-      exact h_final
-    have: (𝓝 (0:ℝ))= (𝓝 ((1/2:ℝ) + 1/π*(-π/2))):= by
-      field_simp
-      ring_nf
-    rw[this]
-    apply tendsto_const_nhds.add
-    apply tendsto_const_nhds.mul h_dirichletBot
+  -- Step 3: Use the limits to find bounds outside a large interval [-R, R]
+    -- Since the limit at +∞ is 1, the function stays near 1 (and thus < 2) for large positive y
+  have h_evt_top : ∀ᶠ y in atTop, ‖DirichletSin y‖ < 2 :=
+    (h_lim_top.norm).eventually (eventually_lt_nhds (show ‖(1:ℝ)‖ < 2 by norm_num))
+  obtain ⟨R_top, h_top⟩ := Filter.mem_atTop_sets.mp h_evt_top
 
-  have h_norm_lim := h_lim_bot.norm
-  have: (𝓝 ‖(0:ℝ)‖)= (𝓝 0):= by simp
-  rw[this] at h_norm_lim
-  rw [Metric.tendsto_atTop] at h_lim_top
-  obtain ⟨R_top, hR_top⟩ := h_lim_top 1 zero_lt_one
-  have h_v_lt : ∀ᶠ (u : ℝ) in atBot, (fun x ↦ ‖DirichletSin x‖) u < 1 :=
-    Filter.Tendsto.eventually_lt_const (f:= fun x ↦ ‖DirichletSin x‖) zero_lt_one h_norm_lim
-  obtain ⟨R_bot, hR_bot_forall⟩ := Filter.mem_atBot_sets.1 h_v_lt
-  let a := min R_bot R_top
-  let b := max R_bot R_top
-  have h_subset : Set.Icc a b ⊆ Set.Icc a b := rfl.subset
-  have h_cont_on : ContinuousOn (fun u↦ DirichletSin u) (Set.Icc a b) := h_cont_v.continuousOn
-  have h_img_compact : IsCompact ((fun u↦ DirichletSin u) '' Set.Icc a b) := isCompact_Icc.image h_cont_v
-  have h_img_bdd : Bornology.IsBounded ((fun u↦ DirichletSin u ) '' Set.Icc a b) := h_img_compact.isBounded
-  obtain ⟨M, hM_pos, hM⟩ := Bornology.IsBounded.exists_pos_norm_le h_img_bdd
-  use max M 2
-  intro u
+  -- Since the limit at -∞ is 0, the function stays near 0 (and thus < 2) for large negative y
+  have h_evt_bot : ∀ᶠ y in atBot, ‖DirichletSin y‖ < 2 :=
+    (h_lim_bot.norm).eventually (eventually_lt_nhds (show ‖(0:ℝ)‖ < 2 by norm_num))
+  obtain ⟨R_bot, h_bot⟩ := Filter.mem_atBot_sets.mp h_evt_bot
+
+  -- Step 4: Bound the function on the central compact interval [-R, R]
+  let R := max |R_top| |R_bot|
+  -- A continuous function on a compact set is bounded (Extreme Value Theorem)
+  obtain ⟨B, hB⟩ := (isCompact_Icc.image DirichletSin_continuous).isBounded.exists_norm_le
+
+  -- Step 5: Combine the local bound (B) and the tail bound (2)
+  use max B 2
+  intro y
   rw [← Real.norm_eq_abs]
-  rcases lt_trichotomy u a with (hu_lt_a | hu_mid_or_right)
-  · have hu_bot : u ≤ R_bot := le_trans (le_of_lt hu_lt_a) (min_le_left _ _)
-    have h_mem := hR_bot_forall u hu_bot
-    have h_lt : ‖(fun x↦ DirichletSin x) u‖ < 1 := h_mem
-    apply le_trans _ (le_max_right M 2)
-    apply le_trans (le_of_lt h_lt)
-    linarith
-  · by_cases hub : u∈ Icc a b
-    · have h_vx_mem : (fun x↦ DirichletSin x) u ∈ (fun x↦ DirichletSin x) '' Icc a b := mem_image_of_mem (fun x↦ DirichletSin x) hub
-      have h_le_M : ‖(fun x↦ DirichletSin x) u‖ ≤ M := hM ((fun x↦ DirichletSin x) u) h_vx_mem
-      exact h_le_M.trans (le_max_left M 2)
-    · have hau : a ≤ u := hu_mid_or_right.elim (fun h => h.symm.le) (fun h => h.le)
-      have h_x_gt_b : u > b := by
-        rw [mem_Icc, not_and_or] at hub
-        cases hub with
-        | inl h_lt_a => exact (h_lt_a hau).elim
-        | inr h_gt_b => exact not_le.mp h_gt_b
-      have h_u_gt_Rtop : u > R_top :=by
-        have h_b_ge : b ≥ R_top := le_max_right R_bot R_top
-        linarith
-      have h_dist : dist ((fun x↦ DirichletSin x) u) 1 < 1 := hR_top u (le_of_lt h_u_gt_Rtop)
-      rw [dist_eq_norm] at h_dist
-      have h_norm_2 : ‖(fun x↦ DirichletSin x) u‖ < 2 := by
-        calc ‖(fun x↦ DirichletSin x) u‖ = ‖((fun x↦ DirichletSin x) u - 1) + 1‖ := by ring_nf
-          _ ≤ ‖(fun x↦ DirichletSin x) u - 1‖ + ‖(1 : ℝ)‖ := norm_add_le _ _
-          _ < 1 + 1 := by
-            simp
-            rw[←Real.norm_eq_abs]
-            exact h_dist
-          _ = 2 := by ring_nf
-      apply le_trans _ (le_max_right M 2)
-      exact le_of_lt h_norm_2
+  by_cases hy : |y| ≤ R
+  · -- Case |y| ≤ R: use the bound from the compact interval
+    rw [abs_le] at hy
+    exact le_trans (hB _ (mem_image_of_mem _ hy)) (le_max_left _ _)
+  · -- Case |y| > R: use the bound from the limits at infinity
+    rw [ not_le,lt_abs] at hy
+    apply le_trans _ (le_max_right B 2)
+    cases hy with
+    | inl hy_pos =>
+      have : y ≥ R_top := by
+        apply le_trans _ (le_of_lt hy_pos)
+        trans |R_top|; exact le_abs_self _; exact le_max_left _ _
+      exact le_of_lt (h_top y this)
+    | inr hy_neg =>
+      have : y ≤ R_bot := by
+        have hy_rev : y < -R := by linarith [hy_neg]
+        apply le_trans (le_of_lt hy_rev)
+        trans -|R_bot|; simp; exact le_max_right _ _; exact neg_abs_le R_bot
+      exact le_of_lt (h_bot y this)
 
+theorem DirichletSinBoundedComp (T t : ℝ) (hT : T ≥ 0) : ∃ C : ℝ, ∀ x, |DirichletSin (T * (x - t))| ≤ C := by
+  obtain ⟨M, hM⟩ := DirichletSinBounded
+  use M
+  intro x
+  exact hM (T * (x - t))
 
 lemma DirichletSinBoundedComp_forall (t : ℝ) :
-    ∃ C : ℝ, ∀ T , ∀ x : ℝ, |DirichletSin (T * (x - t))| ≤ C := by
+    ∃ C : ℝ, ∀ T , ∀ x : ℝ, |DirichletSin (T * (x - t))| ≤ C := by --uniform with respect to T and t
+  -- Use the previously proven global bound for DirichletSin
   obtain ⟨C, hC⟩ := DirichletSinBounded
+  -- The bound C works for any input, including the composition T * (x - t)
   exact ⟨C, fun T x => hC (T * (x - t))⟩
 
 theorem Integrable_DirichletSin_times_integrableFunction (f:ℝ → ℝ ) (T t: ℝ ) (hT: T≥ 0) (hf: Integrable (fun t ↦ f t )): Integrable (fun x => f x * DirichletSin (T * (x - t))):= by
@@ -2265,7 +1217,6 @@ theorem Integrable_DirichletSin_times_integrableFunction (f:ℝ → ℝ ) (T t: 
     simp_rw [Real.norm_eq_abs]
     exact hC
   apply MeasureTheory.Integrable.mul_bdd (f:= f) (g:=fun x => DirichletSin (T * (x - t)) ) (c:= C) hf g_AESM h_g_filter_bounded
-
 
 theorem Integrable_DirichletSin_times_integrableFunction' (f:ℝ → ℂ ) (T t: ℝ ) (hT: T≥ 0) (hf: Integrable (fun t ↦ f t )): Integrable (fun x => f x * ↑(DirichletSin (T * (x - t)))):= by
   obtain ⟨C, hC⟩ := DirichletSinBoundedComp T t hT
@@ -2280,383 +1231,128 @@ theorem Integrable_DirichletSin_times_integrableFunction' (f:ℝ → ℂ ) (T t:
     exact hC
   apply MeasureTheory.Integrable.mul_bdd (f:= f) (g:=fun x => DirichletSin (T * (x - t)) ) (c:= C) hf g_AESM h_g_filter_bounded
 
+theorem Tendsto_Integral_DirichletSin_times_integrableFunction (f : ℝ → ℝ) (t : ℝ) (hf : Integrable (fun t ↦ f t)) :
+    Tendsto (fun T : ℝ ↦ ∫ a, f a * DirichletSin (T * (a - t)))
+    atTop (𝓝 (∫ a in Ioi t, f a)) := by
+  -- Step 1: Obtain a uniform bound C for the DirichletSin function
+  rcases DirichletSinBoundedComp_forall t with ⟨C, hC⟩
+  -- Rewrite the limit integral using an indicator function for the interval (t, ∞)
+  rw [← integral_indicator measurableSet_Ioi]
 
-theorem Tendsto_Integral_DirichletSin_times_integrableFunction (f:ℝ → ℝ ) (t: ℝ ) (hf: Integrable (fun t ↦ f t )):
- Tendsto (fun T : ℝ ↦ ∫ a, f a * DirichletSin (T * (a - t)))
-    atTop (𝓝 (∫ a in Ioi t, f a)):= by
-  rcases DirichletSinBoundedComp_forall t with ⟨C, hC_uniform⟩
-  let g := fun a ↦ |f a| * |C|
-  have h_int_g : Integrable g := hf.abs.mul_const |C|
-
-  have h_dominated : ∀ T, ∀ᵐ a, |f a * DirichletSin (T * (a - t))| ≤ g a := by
-    intro T
-    apply Eventually.of_forall
-    intro a
-    rw [abs_mul]
-    refine mul_le_mul_of_nonneg_left (le_trans (hC_uniform T a) (le_abs_self C)) (abs_nonneg _)
-
-  let f_limit := fun a ↦ f a * HeavisidePerso (a - t)
-  have h_pointwise : ∀ᵐ a, Tendsto (fun T ↦ f a * DirichletSin (T * (a - t))) atTop (𝓝 (f_limit a)) := by
-    apply Eventually.of_forall
-    intro a
-    exact Tendsto.const_mul (f a) (lim_S_Rx (a - t))
-
-  have h_conv : Tendsto (fun T ↦ ∫ a, f a * DirichletSin (T * (a - t))) atTop (𝓝 (∫ a, f_limit a)) := by
-    apply tendsto_integral_filter_of_dominated_convergence g
-    · filter_upwards [eventually_ge_atTop 0] with T hT
-      exact (Integrable_DirichletSin_times_integrableFunction f T t hT hf).aestronglyMeasurable
-    · apply Eventually.of_forall
-      simp_rw [Real.norm_eq_abs]
-      exact h_dominated
-    · exact h_int_g
-    ·exact h_pointwise
-  unfold f_limit at h_conv
-  convert h_conv using 1
-  have h_pos : ∫ a in Ioi t, f a * HeavisidePerso (a - t) = ∫ a in Ioi t, f a := by
-    apply integral_congr_ae
-    rw [EventuallyEq, ae_restrict_iff' measurableSet_Ioi]
+  -- Step 2: Apply the Dominated Convergence Theorem (DCT)
+  -- The dominating function is |f(a)| * |C|, which is integrable since f is integrable.
+  apply tendsto_integral_filter_of_dominated_convergence (fun a ↦ |f a| * |C|)
+  · -- Prove measurability of the integrand for sufficiently large T
+    filter_upwards [eventually_ge_atTop 0] with T hT
+    exact (Integrable_DirichletSin_times_integrableFunction f T t hT hf).aestronglyMeasurable
+  · -- Prove the domination condition: |f(a) * DirichletSin(T(a-t))| ≤ |f(a)| * |C|
     apply Filter.Eventually.of_forall
-    intro x hx
-    rw [Set.mem_Ioi] at hx
-    have hx_gt_t: x-t>0:= sub_pos_of_lt hx
-    unfold HeavisidePerso
-    simp[hx_gt_t]
-  have h_neg : ∫ a in (Ioi t)ᶜ, f a * HeavisidePerso (a - t) = ∫ a in (Ioi t)ᶜ, 0 := by
-    apply integral_congr_ae
-    rw [EventuallyEq, ae_restrict_iff' (measurableSet_Ioi (a := t)).compl]
-    have h_ae : ∀ᵐ x ∂volume.restrict (Iic t), x < t := by
-      have h_le : ∀ᵐ x ∂(volume.restrict (Iic t)), x ≤ t :=
-    ae_restrict_mem (measurableSet_Iic)
-      have h_ne : ∀ᵐ x ∂(volume.restrict (Iic t)), x ≠ t := by
-        refine ae_restrict_of_ae ?_
-        simp [ae_iff, MeasureTheory.NoAtoms.measure_singleton]
-      filter_upwards [h_le, h_ne] with x hx_le hx_ne
-      exact lt_of_le_of_ne hx_le hx_ne
-    rw [Set.compl_Ioi]
-    rw [ae_restrict_iff' measurableSet_Iic] at h_ae
-    filter_upwards [h_ae] with x hx_lt
-    intro hx
-    unfold HeavisidePerso
-    have hx_lt_t:  x-t<0:= by
-      have hx_lt_t_bis:= hx_lt hx
-      linarith
-    simp[hx_lt_t.not_gt, hx_lt_t.ne, if_neg]
+    intro T
+    apply Filter.Eventually.of_forall
+    intro x
+    rw [Real.norm_eq_abs, abs_mul]
+    exact mul_le_mul_of_nonneg_left ((hC T x).trans (le_abs_self C)) (abs_nonneg _)
+  · -- Verify the integrability of the dominating function
+    exact hf.abs.mul_const _
+  · -- Step 4: Handle the pointwise convergence almost everywhere
+    -- We exclude the single point a = t, which has measure zero.
+    have h_neq : ∀ᵐ a, a ≠ t := by
+      rw [ae_iff]; simp only [not_not, Set.setOf_eq_eq_singleton];  exact measure_singleton t
+    filter_upwards [h_neq] with a ha
+    rw [Set.indicator_apply]
+    -- Use the pointwise limit of DirichletSin, which is the HeavisidePerso function
+    have h_lim : Tendsto (fun T ↦ DirichletSin (T * (a - t))) atTop (𝓝 (HeavisidePerso (a - t))) := lim_S_Rx (a - t)
+    split_ifs with h_io
+    · -- Case a > t: HeavisidePerso(a - t) = 1
+      rw [HeavisidePerso, if_pos (sub_pos.mpr h_io)] at h_lim
+      apply Tendsto.const_mul (f a) at h_lim
+      rw [mul_one] at h_lim ; exact h_lim
+    · -- Case a < t (since a ≠ t): HeavisidePerso(a - t) = 0
+      simp only [mem_Ioi, not_lt] at h_io
+      have ha_lt : a < t := lt_of_le_of_ne h_io ha
+      have h_neg : a - t < 0 := sub_neg.mpr ha_lt
+      rw [HeavisidePerso, if_neg h_neg.not_lt, if_neg h_neg.ne] at h_lim
+      apply Tendsto.const_mul (f a) at h_lim
+      rw [mul_zero] at h_lim; exact h_lim
 
-  have h_sum : ∫ (a : ℝ), f a * HeavisidePerso (a - t) = ∫ (a : ℝ) in Ioi t, f a := by
-    rw [← integral_add_compl (measurableSet_Ioi : MeasurableSet (Set.Ioi t))]
-    rw [h_pos, h_neg]
-    simp
-    have h_le : ∀ a, ‖f a * HeavisidePerso (a - t)‖ ≤ ‖f a‖ := by
-      intro a
-      rw [norm_mul]
-      refine mul_le_of_le_one_right (norm_nonneg (f a)) ?_
-      exact HeavisideNorm_le_one (a-t)
-    have h_meas : AEStronglyMeasurable (fun a ↦ f a * HeavisidePerso (a - t)) volume := by
-      apply AEStronglyMeasurable.mul
-      · exact hf.1
-      · apply AEMeasurable.aestronglyMeasurable
-        apply Measurable.aemeasurable
-        unfold HeavisidePerso
-        apply Measurable.ite
-        · have : {a | a - t > 0} = Set.Ioi t := by
-            ext a
-            simp [sub_pos]
-          rw [this]
-          exact measurableSet_Ioi
-        · exact measurable_const
-        · apply Measurable.ite
-          · have : {a | a - t = 0} = {t} := by
-              ext a
-              simp [sub_eq_zero]
-            rw [this]
-            exact measurableSet_singleton t
-          · exact measurable_const
-          · exact measurable_const
-    exact Integrable.mono hf h_meas (Eventually.of_forall h_le)
-  rw[h_sum]
-
-
+--same theorem but this time with a complex-valued function f:ℝ → ℂ
 theorem Tendsto_Integral_DirichletSin_times_integrableFunction' (f:ℝ → ℂ ) (t: ℝ ) (hf: Integrable (fun t ↦ f t )):
  Tendsto (fun T : ℝ ↦ ∫ a, f a * ↑(DirichletSin (T * (a - t))))
     atTop (𝓝 (∫ a in Ioi t, f a)):= by
-  rcases DirichletSinBoundedComp_forall t with ⟨C, hC_uniform⟩
-  let g := fun a ↦ ‖f a‖ * |C|
-  have h_int_g : Integrable g := hf.norm.mul_const |C|
-
-  have h_dominated : ∀ T, ∀ᵐ a, ‖f a * DirichletSin (T * (a - t))‖ ≤ g a := by
+  rcases DirichletSinBoundedComp_forall t with ⟨C, hC⟩
+  rw [← integral_indicator measurableSet_Ioi]
+  apply tendsto_integral_filter_of_dominated_convergence (fun a ↦ ‖f a‖* |C|)
+  · filter_upwards [eventually_ge_atTop 0] with T hT
+    exact (Integrable_DirichletSin_times_integrableFunction' f T t hT hf).aestronglyMeasurable
+  · apply Filter.Eventually.of_forall
     intro T
-    apply Eventually.of_forall
-    intro a
-    rw [norm_mul]
-    have: ‖↑(DirichletSin (T * (a - t)):ℂ)‖ ≤ C:= by
-      simp_rw[Complex.norm_real]
-      simp_rw [Real.norm_eq_abs]
-      exact hC_uniform T a
-    refine mul_le_mul_of_nonneg_left (le_trans this (le_abs_self C)) (norm_nonneg _)
-
-  let f_limit := fun a ↦ f a * ↑(HeavisidePerso (a - t))
-  have h_pointwise : ∀ᵐ a, Tendsto (fun T ↦ f a *↑(DirichletSin (T * (a - t)):ℂ)) atTop (𝓝 (f_limit a)) := by
-    apply Eventually.of_forall
-    intro a
-    have lim_complex : Tendsto (fun R ↦ (↑(DirichletSin (R * (a - t))):ℂ) ) atTop (𝓝 (↑(HeavisidePerso (a - t)):ℂ)) := by
-      let i := fun (x : ℝ) ↦ (x : ℂ)
-      have h_cont : Continuous i := continuous_algebraMap ℝ ℂ
-      have h_rew : (fun R ↦ ↑(DirichletSin (R * (a - t)))) = i ∘ (fun R ↦ DirichletSin (R * (a - t))):= by
-        ext R
-        unfold i
-        simp only [Function.comp_apply]
-      rw [h_rew]
-      have h_point : i (HeavisidePerso (a - t)) = ↑(HeavisidePerso (a - t)) := rfl
-      rw [← h_point]
-      apply Tendsto.comp
-      · exact h_cont.tendsto (HeavisidePerso (a - t))
-      · exact lim_S_Rx (a - t)
-    unfold f_limit
-    exact Tendsto.const_mul (f a) lim_complex
-
-  have h_conv : Tendsto (fun T ↦ ∫ a, f a * ↑(DirichletSin (T * (a - t)):ℂ)) atTop (𝓝 (∫ a, f_limit a)) := by
-    apply tendsto_integral_filter_of_dominated_convergence g
-    · filter_upwards [eventually_ge_atTop 0] with T hT
-      exact (Integrable_DirichletSin_times_integrableFunction' f T t hT hf).aestronglyMeasurable
-    · apply Eventually.of_forall
-      exact h_dominated
-    · exact h_int_g
-    ·exact h_pointwise
-  unfold f_limit at h_conv
-  convert h_conv using 1
-  have h_pos : ∫ a in Ioi t, f a * HeavisidePerso (a - t) = ∫ a in Ioi t, f a := by
-    apply integral_congr_ae
-    rw [EventuallyEq, ae_restrict_iff' measurableSet_Ioi]
     apply Filter.Eventually.of_forall
-    intro x hx
-    rw [Set.mem_Ioi] at hx
-    have hx_gt_t: x-t>0:= sub_pos_of_lt hx
-    unfold HeavisidePerso
-    simp[hx_gt_t]
-  have h_neg : ∫ a in (Ioi t)ᶜ, f a * HeavisidePerso (a - t) = ∫ a in (Ioi t)ᶜ, 0 := by
+    intro x
+    rw [ norm_mul, Complex.norm_real]
+    apply mul_le_mul_of_nonneg_left
+    · exact (hC T x).trans (le_abs_self C)
+    · exact norm_nonneg (f x)
+  · exact hf.norm.mul_const |C|
+  · have h_neq : ∀ᵐ a, a ≠ t := by
+      rw [ae_iff]; simp only [not_not, Set.setOf_eq_eq_singleton];  exact measure_singleton t
+    filter_upwards [h_neq] with a ha
+    rw [Set.indicator_apply]
+    have h_lim : Tendsto (fun T ↦ DirichletSin (T * (a - t))) atTop (𝓝 (HeavisidePerso (a - t))) := lim_S_Rx (a - t)
+    split_ifs with h_io
+    · rw [HeavisidePerso, if_pos (sub_pos.mpr h_io)] at h_lim
+      have h_lim_2 : Tendsto (fun T ↦ (DirichletSin (T * (a - t)) : ℂ)) atTop (𝓝 (1 : ℂ)) :=by simpa using h_lim.ofReal
+      apply Tendsto.const_mul (f a) at h_lim_2
+      rw [mul_one] at h_lim_2 ; exact h_lim_2
+    · simp only [mem_Ioi, not_lt] at h_io
+      have ha_lt : a < t := lt_of_le_of_ne h_io ha
+      have h_neg : a - t < 0 := sub_neg.mpr ha_lt
+      rw [HeavisidePerso, if_neg h_neg.not_lt, if_neg h_neg.ne] at h_lim
+      have h_lim_2 : Tendsto (fun T ↦ (DirichletSin (T * (a - t)) : ℂ)) atTop (𝓝 (0 : ℂ)) :=by simpa using h_lim.ofReal
+      apply Tendsto.const_mul (f a) at h_lim_2
+      rw [mul_zero] at h_lim_2; exact h_lim_2
+
+--this time the integral is restricted to (0, ∞)
+theorem Tendsto_Integral_DirichletSin_times_integrableFunction_zero' (f : ℝ → ℂ) (t : ℝ) (hf : Integrable (fun t ↦ f t)) :
+    Tendsto (fun T : ℝ ↦ ∫ a in Ioi 0, f a * ↑(DirichletSin (T * (a - t))))
+      atTop (𝓝 (∫ a in Ioi (max 0 t), f a)) := by
+  have h_ae_neq : ∀ᵐ a, a ≠ t := by
+    rw [ae_iff]
+    have : {a | ¬a ≠ t} = {t} := by ext a ; simp
+    rw [this]
+    exact volume_singleton (a:=t)
+  rcases DirichletSinBoundedComp_forall t with ⟨C, hC⟩
+  convert tendsto_integral_filter_of_dominated_convergence (fun a ↦ ‖f a‖ * |C|) (f := fun a ↦ f a * ↑(HeavisidePerso (a - t))) (l := atTop) ?_ ?_ ?_ ?_ using 1
+  · congr 1
+    symm
+    rw [← integral_indicator measurableSet_Ioi]
+    conv_rhs => rw [← integral_indicator measurableSet_Ioi]
     apply integral_congr_ae
-    rw [EventuallyEq, ae_restrict_iff' (measurableSet_Ioi (a := t)).compl]
-    have h_ae : ∀ᵐ x ∂volume.restrict (Iic t), x < t := by
-      have h_le : ∀ᵐ x ∂(volume.restrict (Iic t)), x ≤ t :=
-    ae_restrict_mem (measurableSet_Iic)
-      have h_ne : ∀ᵐ x ∂(volume.restrict (Iic t)), x ≠ t := by
-        refine ae_restrict_of_ae ?_
-        simp [ae_iff, MeasureTheory.NoAtoms.measure_singleton]
-      filter_upwards [h_le, h_ne] with x hx_le hx_ne
-      exact lt_of_le_of_ne hx_le hx_ne
-    rw [Set.compl_Ioi]
-    rw [ae_restrict_iff' measurableSet_Iic] at h_ae
-    filter_upwards [h_ae] with x hx_lt
-    intro hx
     unfold HeavisidePerso
-    have hx_lt_t:  x-t<0:= by
-      have hx_lt_t_bis:= hx_lt hx
-      linarith
-    simp[hx_lt_t.not_gt, hx_lt_t.ne, if_neg]
-
-  have h_sum : ∫ (a : ℝ), f a * HeavisidePerso (a - t) = ∫ (a : ℝ) in Ioi t, f a := by
-    rw [← integral_add_compl (measurableSet_Ioi : MeasurableSet (Set.Ioi t))]
-    rw [h_pos, h_neg]
-    simp
-    have h_le : ∀ a, ‖f a * HeavisidePerso (a - t)‖ ≤ ‖f a‖ := by
-      intro a
-      rw [norm_mul]
-      refine mul_le_of_le_one_right (norm_nonneg (f a)) ?_
-      simp_rw[Complex.norm_real]
-      exact HeavisideNorm_le_one (a-t)
-    have h_meas : AEStronglyMeasurable (fun a ↦ f a * HeavisidePerso (a - t)) volume := by
-      apply AEStronglyMeasurable.mul
-      · exact hf.1
-      · apply AEMeasurable.aestronglyMeasurable
-        apply Measurable.aemeasurable
-        unfold HeavisidePerso
-        refine continuous_algebraMap ℝ ℂ |>.measurable.comp ?_
-        apply Measurable.ite
-        · have : {a | a - t > 0} = Set.Ioi t := by
-            ext a
-            simp [sub_pos]
-          rw [this]
-          exact measurableSet_Ioi
-        · exact measurable_const
-        · apply Measurable.ite
-          · have : {a | a - t = 0} = {t} := by
-              ext a
-              simp [sub_eq_zero]
-            rw [this]
-            exact measurableSet_singleton t
-          · exact measurable_const
-          · exact measurable_const
-    exact Integrable.mono hf h_meas (Eventually.of_forall h_le)
-  rw[h_sum]
-
-theorem Tendsto_Integral_DirichletSin_times_integrableFunction_zero' (f:ℝ → ℂ ) (t: ℝ ) (hf: Integrable (fun t ↦ f t )):
- Tendsto (fun T : ℝ ↦ ∫ a in Ioi 0, f a * ↑(DirichletSin (T * (a - t))))
-    atTop (𝓝 (∫ a in Ioi (max 0 t), f a)):= by
-  rcases DirichletSinBoundedComp_forall t with ⟨C, hC_uniform⟩
-  let g := fun a ↦ ‖f a‖ * |C|
-  have h_int_g : Integrable g := hf.norm.mul_const |C|
-
-  have h_dominated : ∀ T, ∀ᵐ a, ‖f a * DirichletSin (T * (a - t))‖ ≤ g a := by
-    intro T
-    apply Eventually.of_forall
-    intro a
-    rw [norm_mul]
-    have: ‖↑(DirichletSin (T * (a - t)):ℂ)‖ ≤ C:= by
-      simp_rw[Complex.norm_real]
-      simp_rw [Real.norm_eq_abs]
-      exact hC_uniform T a
-    refine mul_le_mul_of_nonneg_left (le_trans this (le_abs_self C)) (norm_nonneg _)
-
-  let f_limit := fun a ↦ f a * ↑(HeavisidePerso (a - t))
-  have h_pointwise : ∀ᵐ a, Tendsto (fun T ↦ f a *↑(DirichletSin (T * (a - t)):ℂ)) atTop (𝓝 (f_limit a)) := by
-    apply Eventually.of_forall
-    intro a
-    have lim_complex : Tendsto (fun R ↦ (↑(DirichletSin (R * (a - t))):ℂ) ) atTop (𝓝 (↑(HeavisidePerso (a - t)):ℂ)) := by
-      let i := fun (x : ℝ) ↦ (x : ℂ)
-      have h_cont : Continuous i := continuous_algebraMap ℝ ℂ
-      have h_rew : (fun R ↦ ↑(DirichletSin (R * (a - t)))) = i ∘ (fun R ↦ DirichletSin (R * (a - t))):= by
-        ext R
-        unfold i
-        simp only [Function.comp_apply]
-      rw [h_rew]
-      have h_point : i (HeavisidePerso (a - t)) = ↑(HeavisidePerso (a - t)) := rfl
-      rw [← h_point]
-      apply Tendsto.comp
-      · exact h_cont.tendsto (HeavisidePerso (a - t))
-      · exact lim_S_Rx (a - t)
-    unfold f_limit
-    exact Tendsto.const_mul (f a) lim_complex
-
-  have h_conv : Tendsto (fun T ↦ ∫ a in Ioi 0, f a * ↑(DirichletSin (T * (a - t)):ℂ)) atTop (𝓝 (∫ a in Ioi 0, f_limit a)) := by
-    apply tendsto_integral_filter_of_dominated_convergence g
-    · filter_upwards [eventually_ge_atTop 0] with T hT
-      exact (Integrable_DirichletSin_times_integrableFunction' f T t hT hf).aestronglyMeasurable.restrict
-    · apply Eventually.of_forall
-      intro T
-      apply ae_restrict_of_ae
-      exact h_dominated T
-    · exact h_int_g.restrict
-    ·exact ae_restrict_of_ae h_pointwise
-  unfold f_limit at h_conv
-  convert h_conv using 1
-  by_cases ht : 0 ≤ t
-  have h_pos : ∫ a in Ioi t, f a * HeavisidePerso (a - t) = ∫ a in Ioi t, f a := by
-    apply integral_congr_ae
-    rw [EventuallyEq, ae_restrict_iff' measurableSet_Ioi]
-    apply Filter.Eventually.of_forall
-    intro x hx
-    rw [Set.mem_Ioi] at hx
-    have hx_gt_t: x-t>0:= sub_pos_of_lt hx
-    unfold HeavisidePerso
-    simp[hx_gt_t]
-  have h_neg : ∫ a in Ioi 0 ∩ Iic t, f a * HeavisidePerso (a - t) = ∫ a in Ioi 0 ∩ Iic t, 0 := by
-    apply integral_congr_ae
-    rw [EventuallyEq, ae_restrict_iff' (measurableSet_Ioi.inter measurableSet_Iic)]
-    have h_mem : ∀ᵐ x ∂volume.restrict (Ioi 0 ∩ Iic t), x ∈ Ioi 0 ∩ Iic t :=
-      ae_restrict_mem (measurableSet_Ioi.inter measurableSet_Iic)
-
-    have h_ae : ∀ᵐ x ∂volume.restrict (Ioi 0 ∩ Iic t), x < t := by
-      have h_ne : ∀ᵐ x ∂volume.restrict (Ioi 0 ∩ Iic t), x ≠ t := by
-        refine ae_restrict_of_ae ?_
-        simp [ae_iff, MeasureTheory.NoAtoms.measure_singleton]
-      filter_upwards [h_mem, h_ne] with x hx_mem hx_ne
-      exact lt_of_le_of_ne hx_mem.2 hx_ne
-
-    rw [ae_restrict_iff' (measurableSet_Ioi.inter measurableSet_Iic)] at h_ae
-    filter_upwards [h_ae] with x hx_lt
-    intro hx
-    unfold HeavisidePerso
-    have hx_lt_t:  x-t<0:= by
-      have hx_lt_t_bis:= hx_lt hx
-      linarith
-    simp[hx_lt_t.not_gt, hx_lt_t.ne, if_neg]
-  have h_max : max 0 t = t := max_eq_right ht
-  rw [h_max]
-  have h_union : Ioi 0 = (Ioi 0 ∩ Iic t) ∪ Ioi t := by
-        ext x
-        simp only [Set.mem_Ioi, Set.mem_union, Set.mem_inter_iff, Set.mem_Iic]
-        constructor
-        · intro hx; cases le_or_gt x t with | inl h => left; exact ⟨hx, h⟩ | inr h => right; exact h
-        · intro hx; cases hx with | inl h => exact h.1 | inr h => linarith [ht]
-  rw [h_union, MeasureTheory.setIntegral_union]
-  · rw [h_neg, h_pos]
-    simp
-  · rw [Set.disjoint_iff_inter_eq_empty]
-    ext x
-    simp
-  · exact measurableSet_Ioi
-  · have h_le : ∀ a, ‖f a * HeavisidePerso (a - t)‖ ≤ ‖f a‖ := by
-      intro a
-      rw [norm_mul]
-      refine mul_le_of_le_one_right (norm_nonneg (f a)) ?_
-      simp_rw[Complex.norm_real]
-      exact HeavisideNorm_le_one (a-t)
-    have h_meas : AEStronglyMeasurable (fun a ↦ f a * HeavisidePerso (a - t)) volume := by
-      apply AEStronglyMeasurable.mul
-      · exact hf.1
-      · apply AEMeasurable.aestronglyMeasurable
-        apply Measurable.aemeasurable
-        unfold HeavisidePerso
-        refine continuous_algebraMap ℝ ℂ |>.measurable.comp ?_
-        apply Measurable.ite
-        · have : {a | a - t > 0} = Set.Ioi t := by
-            ext a
-            simp [sub_pos]
-          rw [this]
-          exact measurableSet_Ioi
-        · exact measurable_const
-        · apply Measurable.ite
-          · have : {a | a - t = 0} = {t} := by
-              ext a
-              simp [sub_eq_zero]
-            rw [this]
-            exact measurableSet_singleton t
-          · exact measurable_const
-          · exact measurable_const
-
-    have:=Integrable.mono hf h_meas (Eventually.of_forall h_le)
-    exact this.integrableOn
-  · have h_le : ∀ a, ‖f a * HeavisidePerso (a - t)‖ ≤ ‖f a‖ := by
-      intro a
-      rw [norm_mul]
-      refine mul_le_of_le_one_right (norm_nonneg (f a)) ?_
-      simp_rw[Complex.norm_real]
-      exact HeavisideNorm_le_one (a-t)
-    have h_meas : AEStronglyMeasurable (fun a ↦ f a * HeavisidePerso (a - t)) volume := by
-      apply AEStronglyMeasurable.mul
-      · exact hf.1
-      · apply AEMeasurable.aestronglyMeasurable
-        apply Measurable.aemeasurable
-        unfold HeavisidePerso
-        refine continuous_algebraMap ℝ ℂ |>.measurable.comp ?_
-        apply Measurable.ite
-        · have : {a | a - t > 0} = Set.Ioi t := by
-            ext a
-            simp [sub_pos]
-          rw [this]
-          exact measurableSet_Ioi
-        · exact measurable_const
-        · apply Measurable.ite
-          · have : {a | a - t = 0} = {t} := by
-              ext a
-              simp [sub_eq_zero]
-            rw [this]
-            exact measurableSet_singleton t
-          · exact measurable_const
-          · exact measurable_const
-    have:=Integrable.mono hf h_meas (Eventually.of_forall h_le)
-    exact this.integrableOn
-
-  have ht_lt : t < 0 := lt_of_not_ge ht
-  have h_max : max 0 t = 0 := max_eq_left (le_of_lt ht_lt)
-  rw [h_max]
-  congr 1
-  apply integral_congr_ae
-  rw [EventuallyEq, ae_restrict_iff' measurableSet_Ioi]
-  apply Filter.Eventually.of_forall
-  intro x hx
-  unfold HeavisidePerso
-  have h_pos : x - t > 0 := by
-    simp at hx
-    linarith
-  simp [h_pos]
+    filter_upwards [h_ae_neq] with a hat
+    by_cases ha0 : a ∈ Ioi 0
+    · rw [indicator_of_mem ha0]
+      simp only [mem_Ioi] at ha0
+      split_ifs with h_pos h_zero
+      · simp only [sub_pos] at h_pos
+        rw [indicator_of_mem];simp
+        rwa [mem_Ioi, max_lt_iff, and_iff_right ha0]
+      · exfalso
+        exact hat (sub_eq_zero.mp h_zero)
+      · rw [indicator_of_not_mem]; push_cast; rw[mul_zero]
+        rw [mem_Ioi, max_lt_iff, not_and_or, not_lt]; right ;linarith
+    · rw [indicator_of_not_mem ha0, indicator_of_not_mem]
+      rw [mem_Ioi, not_lt]
+      rw[mem_Ioi] at ha0
+      have h_ale0 : a ≤ 0 := by linarith [ha0]
+      exact h_ale0.trans (le_max_left 0 t)
+  · exact instIsCountablyGenerated_atTop
+  · filter_upwards [eventually_ge_atTop 0] with T hT
+    exact (Integrable_DirichletSin_times_integrableFunction' f T t hT hf).aestronglyMeasurable.restrict
+  · filter_upwards with a
+    filter_upwards with x
+    rw [norm_mul]; rw [Complex.norm_real]
+    refine mul_le_mul_of_nonneg_left ((hC _ _).trans (le_abs_self C)) (norm_nonneg _)
+  · exact hf.norm.mul_const |C| |>.restrict
+  · filter_upwards with a
+    apply Tendsto.const_mul
+    simpa using (lim_S_Rx (a - t)).ofReal
