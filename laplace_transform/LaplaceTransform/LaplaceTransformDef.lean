@@ -20,6 +20,8 @@ import Mathlib.Algebra.Group.Semiconj.Defs
 import Mathlib.Algebra.Group.Commute.Basic
 import Mathlib.Algebra.Group.Commute.Defs
 import Mathlib.Data.List.Defs
+
+
 /-!
 
 
@@ -43,13 +45,13 @@ section Defs
 
 
 variable {E : Type*} [NormedRing E] [CompleteSpace E]
-[NormedSpace ℂ E] [NormedAlgebra ℂ E] [MeasurableSpace E]
+[NormedSpace ℂ E][NormedAlgebra ℂ E][MeasurableSpace E]
 [IsBoundedSMul ℂ E] [NormedSpace ℝ E] [SMulCommClass ℝ ℂ E]
 
 -- E is a ℂ-normed vector space
 
 /-- the next function defines the kernel of the Laplace transform-/
-def laplaceKernel (S : Set E) (L : S → ℂ → E) (e : S) (p : ℂ) : E :=
+def laplaceKernel ( S : Set E) (L : S → ℂ → E) (e : S) (p : ℂ) : E :=
   NormedSpace.exp ℂ (- (L e p))
 
 def fullLaplaceKernel ( S : Set E) (L : S → ℂ → E) (f :S → E) (p : ℂ) : S→ E :=
