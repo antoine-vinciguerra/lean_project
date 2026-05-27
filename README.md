@@ -8,7 +8,7 @@ The formalization spans Banach space measure theory, complex contour integration
 
 A detailed mathematical report explaining the proof architecture, intermediate lemmas, and formalization methodology can be found here:
 
-📄 **[laplace_transform_lean_project.pdf](docs/laplace_transform_lean_project.pdf)**
+📄 **[laplace_transform_lean_project.pdf](./laplace_transform/docs/laplace_transform_lean_project.pdf)**
 
 ---
 
