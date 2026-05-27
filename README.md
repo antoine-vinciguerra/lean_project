@@ -33,6 +33,7 @@ The source code is structured into four main Lean files:
 ### 1. Standard Transforms
 * **Constant function**: $\mathcal{L}\{1\} = \frac{1}{s}$ (for $\text{Re}(s) > 0$)
 * **Identity function**: $\mathcal{L}\{t\} = \frac{1}{s^2}$
+* **Power function**:$\mathcal{L}\{t^k\} = \frac{1}{s^2}$
 * **Exponential function**: $\mathcal{L}\{e^{at}\} = \frac{1}{s-a}$
 
 ### 2. Operational Calculi
