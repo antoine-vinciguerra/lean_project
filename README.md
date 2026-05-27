@@ -1,8 +1,8 @@
 # Formalization of the Laplace Transform in Lean 4
 
-This repository contains a rigorous formalization of the Laplace Transform, its operational properties, and its analytical inversion formula using the **Lean 4** proof assistant and **Mathlib**.
+This repository contains a formalization of the Laplace Transform, its operational properties, and its analytical inversion formula using the **Lean 4** proof assistant and **Mathlib**.
 
-The project scales from foundational measure-theoretic definitions on Banach spaces up to complex contour integration frameworks, including a complete proof of the Dirichlet integral.
+The formalization spans Banach space measure theory, complex contour integration, and the explicit evaluation of the Dirichlet integral.
 
 ## Project Report
 
@@ -44,3 +44,11 @@ The source code is structured into four main Lean files:
 
 ### 4. Analytical Inversion
 * **`IsInverseLaplace`**: Proves that under appropriate differentiability and exponential decay conditions, the Bromwich contour integral accurately recovers $f(t)$ almost everywhere.
+
+## How to Verify and Compile the Project
+
+This project is fully compatible with the standard Lean 4 toolchain. To fetch the pre-compiled Mathlib binaries matching this project's version and verify all proofs locally, open your terminal at the root of the repository and run:
+
+```bash
+lake exe cache get
+lake build
