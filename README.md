@@ -40,7 +40,7 @@ The source code is structured into four main Lean files:
 * **Higher-order Derivatives**: Generalization to the $n$-th iterated derivative using induction (`finite_laplace_iteratedDeriv_eq`).
 
 ### 3. Asymptotics & Limits
-* **Dirichlet Evaluation**: Formal proof that $\int_{0}^{+\infty} \text{sinc}^2(t) \, dt = \frac{\pi}{2}$ and its extension to the improper limit of $\text{sinc}(t)$.
+* **Dirichlet Evaluation**: Formal proof that $\int_{0}^{+\infty} \text{sinc}^2(t) \, dt = \frac{\pi}{2}$ and its extension to the improper limit of $\int_{0}^{+\infty}\text{sinc}(t)$.
 
 ### 4. Analytical Inversion
 * **`IsInverseLaplace`**: Proves that under appropriate differentiability and exponential decay conditions, the Bromwich contour integral accurately recovers $f(t)$ almost everywhere.
