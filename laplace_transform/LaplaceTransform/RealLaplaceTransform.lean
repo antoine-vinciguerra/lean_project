@@ -25,6 +25,7 @@ import Mathlib.Algebra.Group.Commute.Basic
 import Mathlib.Algebra.Group.Commute.Defs
 import LaplaceTransform.LaplaceTransformDef
 import LaplaceTransform.DirichletIntegral
+import LaplaceTransform.DirichletApplications
 import Mathlib.MeasureTheory.Measure.Complex
 import Mathlib.Analysis.Complex.Exponential
 
