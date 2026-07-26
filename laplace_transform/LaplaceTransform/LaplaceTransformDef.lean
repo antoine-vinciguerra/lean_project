@@ -45,7 +45,7 @@ section Defs
 
 
 variable {E : Type*} [NormedRing E] [CompleteSpace E]
-[NormedSpace ℂ E][NormedAlgebra ℂ E][MeasurableSpace E]
+[NormedSpace ℂ E] [NormedAlgebra ℂ E] [MeasurableSpace E]
 [IsBoundedSMul ℂ E] [NormedSpace ℝ E] [SMulCommClass ℝ ℂ E]
 
 -- E is a ℂ-normed vector space

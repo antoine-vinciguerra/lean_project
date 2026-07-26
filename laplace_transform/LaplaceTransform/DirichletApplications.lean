@@ -1,6 +1,8 @@
 import LaplaceTransform.DirichletIntegral
-
-
+import Mathlib.Analysis.Fourier.PoissonSummation
+import Mathlib.Analysis.Fourier.AddCircle
+import Mathlib.Algebra.Group.EvenFunction
+import Mathlib.LinearAlgebra.Finsupp.LinearCombination
 
 @[expose] public section
 
@@ -663,3 +665,1016 @@ theorem integral_sinc_mul_sinc
   · have hba : b ≤ a := le_of_not_ge hab
     rw [min_eq_right hba, max_eq_left hba]
     field_simp [ha.ne', hb.ne']
+
+end
+
+/-!
+SECTION 9 — Lobachevsky's integral formula
+-------------------------------------------------------------------
+-/
+
+/- We prove `∫₀^∞ (sinc x)^2 f(x)dx = ∫₀^π/2 f(x)dx`
+    for a continuous function `π`-periodic function `f` satisfying
+    the reflection symmetry  `f(π - x) = f(x)`.
+-/
+
+@[expose] public section
+
+noncomputable section
+
+open MeasureTheory Filter Set Real Topology
+open scoped Topology BigOperators Interval
+
+namespace Lobachevsky
+
+def normalizedSincSquared : ℝ → ℝ := fun x ↦ (Real.sinc (Real.pi* x))  ^ 2
+
+def cosinePolynomial
+    (N : ℕ) (a : ℕ → ℝ) (x : ℝ) : ℝ :=
+  ∑ n ∈ Finset.range (N + 1),
+    a n * Real.cos (2 * (n : ℝ) * x)
+
+lemma continuous_cosinePolynomial
+    (N : ℕ) (a : ℕ → ℝ) :
+    Continuous (cosinePolynomial N a) := by
+  apply continuous_finset_sum
+  intro n hn
+  apply Continuous.mul
+  · exact continuous_const
+  · continuity
+
+lemma periodic_cosinePolynomial
+    (N : ℕ) (a : ℕ → ℝ) :
+    Function.Periodic
+      (cosinePolynomial N a)
+      Real.pi := by
+    intro x
+    simp only [cosinePolynomial, Finset.sum_congr rfl]
+    congr
+    ext n
+    have h_arg : 2 * (n : ℝ) * (x + Real.pi) = 2 * (n : ℝ) * x + (2 * (n : ℝ)) * Real.pi := by ring
+    rw [h_arg]
+    simp only [Real.cos_add]
+    have h_mul : 2 * (n : ℝ) * Real.pi = ((2 * n : ℕ) : ℝ) * Real.pi := by norm_cast
+    rw[h_mul]
+    rw[Real.sin_nat_mul_pi (2 * n), Real.cos_nat_mul_pi (2 * n)]
+    ring
+    have : n * 2 = 2 * n := by ring
+    rw [this]
+    rw [pow_mul, neg_one_sq]
+    ring
+
+lemma periodic_nat_mul_pi
+  (hf_periodic : Function.Periodic f Real.pi)
+  (n : ℕ) (x : ℝ) :
+  f ((n : ℝ) * Real.pi + x) = f x := by
+  induction n with
+  | zero => simp
+  | succ n ih =>
+    calc
+    f (↑(n + 1) * π + x) = f ((n : ℝ) * Real.pi + Real.pi + x) := by simp; ring
+    _= f ((n : ℝ) * Real.pi + x):= by
+      rw [show (n : ℝ) * Real.pi + Real.pi + x = ((n : ℝ) * Real.pi + x) + Real.pi by ring]
+      exact hf_periodic _
+    _= f x := by
+      rw [ih]
+
+lemma periodic_int_mul_pi
+    (hf_periodic : Function.Periodic f Real.pi)
+    (n : ℤ) (x : ℝ) :
+    f (x + (n : ℝ) * Real.pi) = f x := by
+  cases n with
+  | ofNat k =>
+    calc
+      f (x + (k : ℝ) * Real.pi) = f ((k : ℝ) * Real.pi + x) := by rw [add_comm]
+      _ = f x := periodic_nat_mul_pi hf_periodic k x
+  | negSucc k =>
+      have h := periodic_nat_mul_pi hf_periodic (k + 1) (x - ((k + 1 : ℕ) : ℝ) * Real.pi)
+      have h_simp : ((k + 1 : ℕ) : ℝ) * Real.pi + (x - ((k + 1 : ℕ) : ℝ) * Real.pi) = x := by ring
+      rw [h_simp] at h
+      calc
+      f (x + (Int.negSucc k : ℝ) * Real.pi)
+        = f (x - ((k + 1 : ℕ) : ℝ) * Real.pi) := by
+        congr 1
+        push_cast
+        ring
+      _ = f x := h.symm
+
+lemma exists_mod_pi_mem_Ico (x : ℝ) :
+    ∃ n : ℤ,
+      x - (n : ℝ) * Real.pi ∈ Set.Ico (0 : ℝ) Real.pi := by
+  let n := Int.floor (x / Real.pi)
+  use n
+  constructor
+  · have h1 : (n : ℝ) * Real.pi ≤ x := by
+      have h2 : (n : ℝ) ≤ x / Real.pi := by
+        exact Int.floor_le (x / Real.pi)
+      have h3 : (n : ℝ) * Real.pi ≤ x := (le_div_iff₀ Real.pi_pos).mp h2
+      linarith [h3]
+    linarith
+  · have h1 : x < (n + 1 : ℝ) * Real.pi := by
+      have h2 : x / Real.pi < (n + 1 : ℝ) := by
+        exact Int.lt_floor_add_one (x / Real.pi)
+      have h3 : x < (n + 1 : ℝ) * Real.pi := (div_lt_iff₀ Real.pi_pos).mp h2
+      linarith [h3]
+    linarith
+
+lemma bounded_of_continuous_periodic_pi
+    (hf_cont : Continuous f)
+    (hf_periodic : Function.Periodic f Real.pi) :
+    ∃ C : ℝ, 0 ≤ C ∧ ∀ x : ℝ, |f x| ≤ C := by
+  have h_Icc_nonempty : (Set.Icc (0 : ℝ) Real.pi).Nonempty := by
+    use 0
+    simp [Real.pi_nonneg]
+  have h_comp : IsCompact (Set.Icc (0 : ℝ) Real.pi) := isCompact_Icc
+  obtain ⟨x_max, hx_mem, hx_max⟩ :=
+    IsCompact.exists_isMaxOn h_comp h_Icc_nonempty hf_cont.abs.continuousOn
+  use |f x_max|
+  constructor
+  · exact abs_nonneg (f x_max)
+  · intro x
+    obtain ⟨n, hn⟩ := exists_mod_pi_mem_Ico x
+
+    have h_eq : f x = f (x - (n : ℝ) * Real.pi) := by
+      have h:= periodic_int_mul_pi hf_periodic n (x - (n : ℝ) * Real.pi)
+      simp at h
+      exact h
+    rw [h_eq]
+    have h_mem : x - (n : ℝ) * Real.pi ∈ Set.Icc (0 : ℝ) Real.pi := Set.Ico_subset_Icc_self hn
+    exact hx_max h_mem
+
+lemma even_cosinePolynomial
+    (N : ℕ) (a : ℕ → ℝ) :
+    ∀ x : ℝ,
+      cosinePolynomial N a (-x) =
+        cosinePolynomial N a x := by
+  intro x
+  simp [cosinePolynomial]
+
+lemma integrableOn_sinc_sq_mul
+    (hf_cont : Continuous f)
+    (hf_bounded : ∃ C : ℝ, 0 ≤ C ∧ ∀ x : ℝ, |f x| ≤ C) :
+    IntegrableOn
+      (fun x : ℝ => (Real.sinc x) ^ 2 * f x)
+      (Set.Ioi 0) := by
+  obtain ⟨C, _, hC_bound⟩ := hf_bounded
+  have hf_meas : AEStronglyMeasurable f (volume.restrict (Set.Ioi 0)) :=
+    hf_cont.aestronglyMeasurable.restrict
+  have hf_bound_ae : ∀ᵐ x ∂(volume.restrict (Set.Ioi 0)), ‖f x‖ ≤ C := by
+    apply ae_of_all
+    intro x
+    rw [Real.norm_eq_abs]
+    exact hC_bound x
+  exact MeasureTheory.Integrable.mul_bdd integrable_sinc_sq hf_meas hf_bound_ae
+
+lemma integrableOn_sinc_sq_mul_cos_two_nat (n : ℕ) :
+    IntegrableOn
+      (fun x : ℝ =>
+        (Real.sinc x) ^ 2 *
+          Real.cos (2 * (n : ℝ) * x))
+      (Set.Ioi 0) := by
+  have hf_cont : Continuous (fun x : ℝ => Real.cos (2 * (n : ℝ) * x)) := by
+    continuity
+  have hf_bounded : ∃ C : ℝ, 0 ≤ C ∧ ∀ x : ℝ, |(fun y : ℝ => Real.cos (2 * (n : ℝ) * y)) x| ≤ C:= by
+    use 1
+    constructor
+    · norm_num
+    · intro x
+      simp only [Real.abs_cos_le_one]
+  exact integrableOn_sinc_sq_mul hf_cont hf_bounded
+
+lemma sinc_sq_mul_cos_two_nat_ae (n : ℕ) :
+    (fun x : ℝ =>
+      (Real.sinc x) ^ 2 *
+        Real.cos (2 * (n : ℝ) * x))
+      =ᵐ[volume.restrict (Set.Ioi 0)]
+    (fun x : ℝ =>
+      (1 / 4 : ℝ) *
+        (((1 - Real.cos (2 * ((n : ℝ) + 1) * x)) / x ^ 2) +
+         ((1 - Real.cos (2 * ((n : ℝ) - 1) * x)) / x ^ 2) -
+         2 *
+           ((1 - Real.cos (2 * (n : ℝ) * x)) / x ^ 2))) := by
+  filter_upwards [ae_restrict_mem (measurableSet_Ioi)]
+  intro x hx
+  have hx0 : x ≠ 0 := ne_of_gt hx
+  unfold Real.sinc
+  rw [if_neg hx0]
+  have h_cos_plus : Real.cos (2 * ((n : ℝ) + 1) * x) = Real.cos (2 * (n : ℝ) * x) * Real.cos (2 * x) - Real.sin (2 * (n : ℝ) * x) * Real.sin (2 * x) := by
+    have : 2 * ((n : ℝ) + 1) * x = 2 * (n : ℝ) * x + 2 * x := by ring
+    rw [this, Real.cos_add]
+  have h_cos_minus : Real.cos (2 * ((n : ℝ) - 1) * x) = Real.cos (2 * (n : ℝ) * x) * Real.cos (2 * x) + Real.sin (2 * (n : ℝ) * x) * Real.sin (2 * x) := by
+    have : 2 * ((n : ℝ) - 1) * x = 2 * (n : ℝ) * x - 2 * x := by ring
+    rw [this, Real.cos_sub]
+  rw [h_cos_plus,h_cos_minus]
+  have h_cos_double : Real.cos (2 * x) = 1 - 2 * (Real.sin x)^2 := by
+    calc Real.cos (2 * x)
+      _ = 2*Real.cos x ^ 2 - 1 := Real.cos_two_mul x
+      _ = (1 - Real.sin x ^ 2) - Real.sin x ^ 2 := by rw [← Real.sin_sq_add_cos_sq x]; ring
+      _ = 1 - 2 * Real.sin x ^ 2 := by ring
+  rw [h_cos_double]
+  ring
+
+lemma integral_sinc_sq_mul_cos_two_nat
+    (n : ℕ) (hn : 0 < n) :
+    (∫ x in Set.Ioi 0,
+      (Real.sinc x) ^ 2 *
+        Real.cos (2 * (n : ℝ) * x)) = 0 := by
+    have h_eq_int : (∫ x in Set.Ioi 0, (Real.sinc x) ^ 2 * Real.cos (2 * (n : ℝ) * x)) =
+      ∫ x in Set.Ioi 0, (1 / 4 : ℝ) *
+        (((1 - Real.cos (2 * ((n : ℝ) + 1) * x)) / x ^ 2) +
+         ((1 - Real.cos (2 * ((n : ℝ) - 1) * x)) / x ^ 2) -
+         2 * ((1 - Real.cos (2 * (n : ℝ) * x)) / x ^ 2)) := by
+      apply integral_congr_ae
+      exact sinc_sq_mul_cos_two_nat_ae n
+    rw [h_eq_int, integral_const_mul]
+    have h_int_piece1 : IntegrableOn (fun x : ℝ => (1 - Real.cos (2 * ((n : ℝ) + 1) * x)) / x ^ 2) (Set.Ioi 0) := by
+      apply integrableOn_one_sub_cos_div_sq
+    have h_int_piece2 : IntegrableOn (fun x : ℝ => (1 - Real.cos (2 * ((n : ℝ) - 1) * x)) / x ^ 2) (Set.Ioi 0) := by
+      apply integrableOn_one_sub_cos_div_sq
+    have h_int_piece3: IntegrableOn (fun x : ℝ =>   (1 - Real.cos (2 * (n : ℝ) * x)) / x ^ 2) (Set.Ioi 0) := by
+      apply integrableOn_one_sub_cos_div_sq
+    have h_int_piece3Tot:= h_int_piece3.const_mul 2
+    have h_int_piece12 :Integrable
+      (fun x : ℝ =>
+        (1 - Real.cos (2 * ((n : ℝ) + 1) * x)) / x ^ 2 +
+        (1 - Real.cos (2 * ((n : ℝ) - 1) * x)) / x ^ 2)
+      (volume.restrict (Set.Ioi 0)) := h_int_piece1.add h_int_piece2
+    rw [integral_sub h_int_piece12 h_int_piece3Tot]
+    rw [integral_add h_int_piece1 h_int_piece2]
+    rw [integral_const_mul]
+    rw [integral_one_sub_cos_div_sq
+      (2 * ((n : ℝ) + 1))]
+    rw [integral_one_sub_cos_div_sq
+      (2 * ((n : ℝ) - 1))]
+    rw [integral_one_sub_cos_div_sq
+      (2 * (n : ℝ))]
+    field_simp [hn.ne, mul_assoc, mul_comm 2, mul_comm 4]
+    simp
+    have hn1_nat : 1 ≤ n := by omega
+    have hn1_real : (1 : ℝ) ≤ (n : ℝ) := by
+      exact_mod_cast hn1_nat
+    rw [abs_of_nonneg (by positivity : 0 ≤ (n : ℝ) + 1)]
+    rw [abs_of_nonneg (sub_nonneg.mpr hn1_real)]
+    ring
+
+lemma intervalIntegral_cos_two_nat
+    (n : ℕ) (hn : 0 < n) :
+    (∫ x in (0 : ℝ)..Real.pi / 2,
+      Real.cos (2 * (n : ℝ) * x)) = 0 := by
+  let c : ℝ := 2 * (n : ℝ)
+  have hc : c ≠ 0 := by
+    dsimp [c]
+    positivity
+  change (∫ x in (0 : ℝ)..Real.pi / 2,
+      Real.cos (c * x)) = 0
+  have hint :
+    ∀ x ∈ Set.uIcc (0 : ℝ) (Real.pi / 2),
+        HasDerivAt
+        (fun y : ℝ => Real.sin (c * y) / c)
+        (Real.cos (c * x))
+        x := by
+    intro x _
+    convert
+    (((hasDerivAt_id x).const_mul c).sin.div_const c)
+    using 1
+    field_simp [hc]
+    simp
+  have hintegrable :
+      IntervalIntegrable
+        (fun x : ℝ => Real.cos (c * x))
+        volume 0 (Real.pi / 2) := by
+    exact
+      (by
+        fun_prop :
+        Continuous (fun x : ℝ => Real.cos (c * x))
+      ).intervalIntegrable _ _
+  rw [intervalIntegral.integral_eq_sub_of_hasDerivAt hint hintegrable]
+  have harg :
+      c * (Real.pi / 2) = (n : ℝ) * Real.pi := by
+    dsimp [c]
+    ring
+  rw [harg, Real.sin_nat_mul_pi]
+  simp
+
+lemma integral_sinc_sq_constant :
+    (∫ x in Set.Ioi 0, (Real.sinc x) ^ 2) =
+      Real.pi / 2 := by
+  exact integral_sinc_sq_eq_pi_div_two
+
+lemma intervalIntegral_one_zero_pi_div_two :
+    (∫ x in (0 : ℝ)..Real.pi / 2, (1 : ℝ)) =
+      Real.pi / 2 := by
+  have h_integrable : IntervalIntegrable (fun x : ℝ => (1 : ℝ)) volume 0 (Real.pi / 2) := by
+    exact (continuous_const.intervalIntegrable 0 (Real.pi / 2))
+  have hint :
+    ∀ x ∈ Set.uIcc (0 : ℝ) (Real.pi / 2),
+        HasDerivAt
+        (fun y : ℝ => y)
+        (1)
+        x := by
+    intro x _
+    exact hasDerivAt_id' x
+  rw [intervalIntegral.integral_eq_sub_of_hasDerivAt hint h_integrable]
+  simp
+
+lemma integrableOn_sinc_sq_mul_cosinePolynomial
+    (N : ℕ) (a : ℕ → ℝ) :
+    IntegrableOn
+      (fun x : ℝ =>
+        (Real.sinc x) ^ 2 *
+          cosinePolynomial N a x)
+      (Set.Ioi 0) := by
+  apply integrableOn_sinc_sq_mul
+  · exact continuous_cosinePolynomial N a
+  · exact bounded_of_continuous_periodic_pi
+      (continuous_cosinePolynomial N a)
+      (periodic_cosinePolynomial N a)
+
+lemma lobachevsky_cosinePolynomial
+    (N : ℕ) (a : ℕ → ℝ) :
+    (∫ x in Set.Ioi 0,
+      (Real.sinc x) ^ 2 *
+        cosinePolynomial N a x)
+      =
+    ∫ x in (0 : ℝ)..Real.pi / 2,
+      cosinePolynomial N a x := by
+  classical
+  have hmode (n : ℕ) :
+      (∫ x in Set.Ioi 0,
+        (Real.sinc x) ^ 2 *
+          Real.cos (2 * (n : ℝ) * x))
+        =
+      ∫ x in (0 : ℝ)..Real.pi / 2,
+        Real.cos (2 * (n : ℝ) * x) := by
+    by_cases hn0 : n = 0
+    · subst n
+      simpa using integral_sinc_sq_eq_pi_div_two
+    · have hn : 0 < n := Nat.pos_of_ne_zero hn0
+      rw [integral_sinc_sq_mul_cos_two_nat n hn,
+          intervalIntegral_cos_two_nat n hn]
+  have hmode_integrable (n : ℕ) :
+      IntegrableOn
+        (fun x : ℝ =>
+          (Real.sinc x) ^ 2 *
+            Real.cos (2 * (n : ℝ) * x))
+        (Set.Ioi 0) := by
+    apply integrableOn_sinc_sq_mul
+    · fun_prop
+    · refine ⟨1, zero_le_one, ?_⟩
+      intro x
+      exact abs_cos_le_one _
+  unfold cosinePolynomial
+  simp_rw [Finset.mul_sum]
+  rw [MeasureTheory.integral_finset_sum]
+  · rw [intervalIntegral.integral_finset_sum]
+    · apply Finset.sum_congr rfl
+      intro n hn_mem
+      calc
+        (∫ x in Set.Ioi 0,
+            (Real.sinc x) ^ 2 *
+              (a n * Real.cos (2 * (n : ℝ) * x)))
+            =
+          a n *
+            (∫ x in Set.Ioi 0,
+              (Real.sinc x) ^ 2 *
+                Real.cos (2 * (n : ℝ) * x)) := by
+              rw [← integral_const_mul]
+              apply integral_congr_ae
+              filter_upwards with x
+              ring
+        _ =
+          a n *
+            (∫ x in (0 : ℝ)..Real.pi / 2,
+              Real.cos (2 * (n : ℝ) * x)) := by
+              rw [hmode n]
+        _ =
+          ∫ x in (0 : ℝ)..Real.pi / 2,
+            a n * Real.cos (2 * (n : ℝ) * x) := by
+              rw [intervalIntegral.integral_const_mul]
+    · intro n hn_mem
+      exact(by
+          fun_prop :
+          Continuous
+            (fun x : ℝ =>
+              a n * Real.cos (2 * (n : ℝ) * x))
+        ).intervalIntegrable _ _
+  ·intro n hn_mem
+   have h := (hmode_integrable n).const_mul (a n)
+   simpa [mul_assoc, mul_left_comm, mul_comm] using h
+
+lemma even_of_periodic_of_reflection
+    {f : ℝ → ℝ}
+    (hf_periodic : Function.Periodic f Real.pi)
+    (hf_reflection : ∀ x : ℝ, f (Real.pi - x) = f x) :
+    ∀ x : ℝ, f (-x) = f x := by
+  intro x
+  calc
+    f (-x) = f (Real.pi - (Real.pi + x)) := by
+      congr 1
+      ring
+    _ = f (Real.pi + x) := by
+      rw [hf_reflection]
+    _ = f (x+Real.pi) := by
+      congr 1
+      ring
+    _ = f x :=  hf_periodic x
+
+private lemma fourier_pi_apply
+    (k : ℤ) (x : ℝ) :
+    (fourier (T := Real.pi) k)
+        (x : AddCircle Real.pi) =
+      Complex.exp
+        (((2 * (k : ℝ) * x : ℝ) : ℂ) * Complex.I) := by
+  rw [fourier_coe_apply]
+  apply congrArg Complex.exp
+  apply Complex.ext
+  · push_cast
+    field_simp [Real.pi_ne_zero]
+  · push_cast
+    field_simp [Real.pi_ne_zero]
+
+private lemma fourier_pi_symmetrized_term
+    (k : ℤ) (z : ℂ) (x : ℝ) :
+    (((z • fourier (T := Real.pi) k)
+          (x : AddCircle Real.pi)).re +
+      ((z • fourier (T := Real.pi) k)
+          (-x : AddCircle Real.pi)).re) / 2
+      =
+    z.re * Real.cos (2 * (k : ℝ) * x) := by
+  simp only [ContinuousMap.smul_apply]
+  simp only [smul_eq_mul]
+
+  rw [fourier_pi_apply k x]
+  have hfourier_neg :
+    (fourier (T := Real.pi) k) (-(x : AddCircle Real.pi))
+    = Complex.exp (((2 * (k : ℝ) * (-x) : ℝ) : ℂ) * Complex.I) := by
+    simpa using fourier_pi_apply k (-x)
+  rw [hfourier_neg]
+  simp only [
+    Complex.mul_re,
+    Complex.exp_ofReal_mul_I_re,
+    Complex.exp_ofReal_mul_I_im
+  ]
+
+  rw [show 2 * (k : ℝ) * (-x) =
+      -(2 * (k : ℝ) * x) by ring]
+  rw [Real.cos_neg, Real.sin_neg]
+  ring
+
+private lemma cosine_natAbs
+    (k : ℤ) (x : ℝ) :
+    Real.cos (2 * (k.natAbs : ℝ) * x) =
+      Real.cos (2 * (k : ℝ) * x) := by
+  cases k with
+  | ofNat n =>
+      simp
+  | negSucc n =>
+      rw [show
+        2 * ((Int.negSucc n : ℤ) : ℝ) * x =
+          -(2 * ((n + 1 : ℕ) : ℝ) * x) by
+            push_cast
+            ring]
+      simp [Real.cos_neg]
+
+lemma finsupp_fourier_symmetrization
+    (d : ℤ →₀ ℂ) :
+    ∃ c : ℕ →₀ ℝ,
+      ∀ x : ℝ,
+        c.sum
+            (fun n b =>
+              b * Real.cos (2 * (n : ℝ) * x))
+          =
+        (((d.sum
+              (fun k z =>
+                z • fourier (T := Real.pi) k))
+              (x : AddCircle Real.pi)).re +
+         ((d.sum
+              (fun k z =>
+                z • fourier (T := Real.pi) k))
+              (-x : AddCircle Real.pi)).re) / 2 := by
+  classical
+
+  let c : ℕ →₀ ℝ :=
+    d.sum
+      (fun k z =>
+        Finsupp.single k.natAbs z.re)
+
+  refine ⟨c, ?_⟩
+  intro x
+
+  dsimp only [c]
+
+  induction d using Finsupp.induction_linear with
+  | zero =>
+      simp
+
+  | add d₁ d₂ hd₁ hd₂ =>
+      have h_coeff :(d₁ + d₂).sum
+                (fun k z => Finsupp.single k.natAbs z.re)
+                = d₁.sum (fun k z => Finsupp.single k.natAbs z.re)
+                +d₂.sum (fun k z => Finsupp.single k.natAbs z.re)
+                := by
+        exact Finsupp.sum_add_index'
+           (f := d₁) (g := d₂) (h := fun k z =>Finsupp.single k.natAbs z.re)
+          (by
+            intro k
+            simp)
+          (by
+            intro k z₁ z₂
+            simp [Complex.add_re])
+
+      have h_sum : (((d₁ + d₂).sum
+                  (fun k z => Finsupp.single k.natAbs z.re)).sum
+                  (fun n b => b * Real.cos (2 * (n : ℝ) * x)))
+                  =(d₁.sum (fun k z => Finsupp.single k.natAbs z.re)).sum
+                  (fun n b => b * Real.cos (2 * (n : ℝ) * x))
+                  +(d₂.sum (fun k z => Finsupp.single k.natAbs z.re)).sum
+                  (fun n b => b * Real.cos (2 * (n : ℝ) * x)) := by
+        rw [h_coeff]
+        exact Finsupp.sum_add_index'
+          (f := d₁.sum (fun k z => Finsupp.single k.natAbs z.re))
+          (g := d₂.sum (fun k z => Finsupp.single k.natAbs z.re))
+          (h := fun n b => b * Real.cos (2 * (n : ℝ) * x))
+          (by
+            intro n
+            simp)
+          (by
+            intro n b₁ b₂
+            ring)
+
+      have h_fourier : (d₁ + d₂).sum
+              (fun k z => z • fourier (T := Real.pi) k)
+              = d₁.sum (fun k z => z • fourier (T := Real.pi) k)
+              + d₂.sum (fun k z => z • fourier (T := Real.pi) k) := by
+        apply Finsupp.sum_add_index'
+        · intro k
+          simp
+        · intro k z₁ z₂
+          change
+            (z₁ + z₂) • fourier (T := Real.pi) k =
+              z₁ • fourier (T := Real.pi) k +
+              z₂ • fourier (T := Real.pi) k
+          exact add_smul z₁ z₂ (fourier (T := Real.pi) k)
+
+      rw [h_sum, hd₁, hd₂, h_fourier]
+      simp only [
+        ContinuousMap.add_apply,
+        Complex.add_re
+      ]
+      ring
+
+  | single k z =>
+      simp only [
+        Finsupp.sum_single_index,
+        Complex.zero_re,
+        Finsupp.single_zero,
+        zero_mul,
+        zero_smul,
+        ContinuousMap.smul_apply
+      ]
+
+      rw [cosine_natAbs k x]
+      exact
+        (fourier_pi_symmetrized_term k z x).symm
+
+lemma exists_finsupp_cosine_uniform_approx
+    {f : ℝ → ℝ}
+    (hf_cont : Continuous f)
+    (hf_periodic : Function.Periodic f Real.pi)
+    (hf_even : Function.Even f)
+    {ε : ℝ} (hε : 0 < ε) :
+    ∃ c : ℕ →₀ ℝ, ∀ x : ℝ,
+      |f x -
+      c.sum (fun n b => b * Real.cos (2 * (n : ℝ) * x))|
+       < ε := by
+  classical
+  letI : Fact (0 < Real.pi) := ⟨Real.pi_pos⟩
+  have hendpoint : f 0 = f Real.pi := by
+    simpa using (hf_periodic 0).symm
+  /-
+  The continuous function induced by `f` on `AddCircle π`.
+  -/
+  let F : C(AddCircle Real.pi, ℂ) :=
+    {
+      toFun :=
+        fun z =>
+         ((AddCircle.liftIco Real.pi 0 f z : ℝ) : ℂ)
+      continuous_toFun :=
+        Complex.continuous_ofReal.comp
+          (AddCircle.liftIco_zero_continuous
+            hendpoint
+            hf_cont.continuousOn)
+    }
+  /-
+  The lift agrees with `f` on every real representative.
+  -/
+  have hF_apply (x : ℝ) :
+      F (x : AddCircle Real.pi) = (f x : ℂ) := by
+    obtain ⟨n, hn⟩ := exists_mod_pi_mem_Ico x
+    let y : ℝ := x - (n : ℝ) * Real.pi
+    have hy : y ∈ Set.Ico (0 : ℝ) Real.pi := by
+      exact hn
+    have hcoe : (y : AddCircle Real.pi) =
+                (x : AddCircle Real.pi) := by
+      dsimp [y]
+      rw [← zsmul_eq_mul Real.pi n]
+      rw [AddCircle.coe_zsmul Real.pi]
+      rw [AddCircle.coe_period Real.pi]
+      simp
+    have hperiodic : f y = f x := by
+      symm
+      convert
+        periodic_int_mul_pi
+          hf_periodic n y
+        using 1
+      · dsimp [y]
+        ring
+    calc
+      F (x : AddCircle Real.pi)
+          = F (y : AddCircle Real.pi) := by
+              rw [hcoe]
+      _ = (f y : ℂ) := by
+            simp [
+              F,
+              AddCircle.liftIco_zero_coe_apply hy
+            ]
+      _ = (f x : ℂ) := by rw [hperiodic]
+
+   /-
+  The finite Fourier span is dense in
+  `C(AddCircle π, ℂ)`.
+  -/
+  let S : Submodule ℂ C(AddCircle Real.pi, ℂ) :=
+    Submodule.span ℂ
+      (Set.range
+        (fourier :
+          ℤ → C(AddCircle Real.pi, ℂ)))
+
+  have hS_dense : Dense (S : Set C(AddCircle Real.pi, ℂ)) := by
+    apply
+      (Submodule.dense_iff_topologicalClosure_eq_top).2
+    simpa [S] using
+      (span_fourier_closure_eq_top
+        (T := Real.pi))
+
+  obtain ⟨P, hPmem, hFP⟩ := hS_dense.exists_dist_lt F hε
+  obtain ⟨d, hd⟩ := Finsupp.mem_span_range_iff_exists_finsupp.mp hPmem
+  let Q : C(AddCircle Real.pi, ℂ) :=
+    d.sum (fun k z => z • fourier (T := Real.pi) k)
+  have hFQ : dist F Q < ε := by
+    have hQP : Q = P := by
+      exact hd
+    rw [hQP]
+    exact hFP
+  have hnorm : ‖F - Q‖ < ε := by
+    simpa [dist_eq_norm] using hFQ
+  have hpointwise
+      (z : AddCircle Real.pi) :
+      ‖F z - Q z‖ < ε := by
+    calc
+      ‖F z - Q z‖
+          = ‖(F - Q) z‖ := by rfl
+      _ ≤ ‖F - Q‖ :=
+        ContinuousMap.norm_coe_le_norm
+          (F - Q) z
+      _ < ε := hnorm
+
+  obtain ⟨c, hc⟩ := finsupp_fourier_symmetrization d
+  refine ⟨c, ?_⟩
+  intro x
+
+  have hxerr :
+      |f x -
+        (Q (x : AddCircle Real.pi)).re| < ε := by
+    have hre :=
+      Complex.abs_re_le_norm
+        (F (x : AddCircle Real.pi) -
+        Q (x : AddCircle Real.pi))
+    have hre' :
+      |f x - (Q (x : AddCircle Real.pi)).re|
+        ≤
+      ‖F (x : AddCircle Real.pi) - Q (x : AddCircle Real.pi)‖ := by
+      simpa [hF_apply] using hre
+    have hp := hpointwise (x : AddCircle Real.pi)
+    exact lt_of_le_of_lt hre' hp
+
+  have hnegerr :
+      |f x -(Q (-x : AddCircle Real.pi)).re| < ε := by
+    have hre := Complex.abs_re_le_norm
+        (F (-x : AddCircle Real.pi) -
+          Q (-x : AddCircle Real.pi))
+    have hp := hpointwise (-x : AddCircle Real.pi)
+    have hF_neg :
+        F (-(x : AddCircle Real.pi)) = (f (-x) : ℂ) := by
+      rw [← AddCircle.coe_neg]
+      exact hF_apply (-x)
+    have hre' : |f (-x) - (Q (-x : AddCircle Real.pi)).re|
+      ≤ ‖F (-x : AddCircle Real.pi) -
+      Q (-x : AddCircle Real.pi)‖ := by
+      simpa only [
+        Complex.sub_re,
+        hF_neg,
+        Complex.ofReal_re
+      ] using hre
+    have hraw :
+    |f (-x) - (Q (-x : AddCircle Real.pi)).re| < ε :=
+    lt_of_le_of_lt hre' hp
+    simpa [hf_even x] using hraw
+
+  rw [hc x]
+  let A : ℝ := (Q (x : AddCircle Real.pi)).re
+  let B : ℝ := (Q (-x : AddCircle Real.pi)).re
+  change |f x - (A + B) / 2| < ε
+  calc |f x - (A + B) / 2| =
+  |((f x - A) + (f x - B)) / 2| := by
+        congr 1
+        ring
+  _ =|(f x - A) + (f x - B)| / 2 := by
+        rw [abs_div]
+        norm_num
+  _ ≤ (|f x - A| + |f x - B|) / 2 := by
+        apply (div_le_div_iff_of_pos_right
+          (by norm_num : (0 : ℝ) < 2)).2
+        exact abs_add_le (f x - A) (f x - B)
+  _ < (ε + ε) / 2 := by
+        apply (div_lt_div_iff_of_pos_right (by norm_num : (0 : ℝ) < 2)).2
+        exact add_lt_add hxerr hnegerr
+  _ =ε := by simp
+
+lemma exists_cosinePolynomial_uniform_approx
+    {f : ℝ → ℝ}
+    (hf_cont : Continuous f)
+    (hf_periodic : Function.Periodic f Real.pi)
+    (hf_even : Function.Even f)
+    {ε : ℝ} (hε : 0 < ε) :
+    ∃ N : ℕ, ∃ a : ℕ → ℝ, ∀ x : ℝ,
+      |f x - cosinePolynomial N a x| < ε := by
+  classical
+  obtain ⟨c, hc⟩ :=
+  exists_finsupp_cosine_uniform_approx hf_cont hf_periodic hf_even hε
+  let N : ℕ := c.support.sup id
+  let a : ℕ → ℝ := fun n => c n
+
+  refine ⟨N, a, ?_⟩
+  intro x
+
+  have hsupp :
+      c.support ⊆ Finset.range (N + 1) := by
+    intro n hn
+    rw [Finset.mem_range]
+    have hnN : n ≤ N := by
+      dsimp [N]
+      exact Finset.le_sup (f := id) hn
+    omega
+
+  have hsum :
+    c.sum (fun n b => b * Real.cos (2 * (n : ℝ) * x))
+        = cosinePolynomial N a x := by
+    unfold cosinePolynomial
+    change ( ∑ n ∈ c.support, c n * Real.cos (2 * (n : ℝ) * x)
+    =∑ n ∈ Finset.range (N + 1), a n * Real.cos (2 * (n : ℝ) * x))
+    apply Finset.sum_subset hsupp
+    intro n hn_range hn_support
+    have hcn : c n = 0 :=
+      Finsupp.notMem_support_iff.mp hn_support
+    simp [a, hcn]
+
+  rw [← hsum]
+  exact hc x
+
+lemma exists_cosinePolynomial_uniform_approx_of_reflection
+    {f : ℝ → ℝ}
+    (hf_cont : Continuous f)
+    (hf_periodic : Function.Periodic f Real.pi)
+    (hf_reflection : ∀ x : ℝ, f (Real.pi - x) = f x)
+    {ε : ℝ} (hε : 0 < ε) :
+    ∃ N : ℕ, ∃ a : ℕ → ℝ,
+      ∀ x : ℝ,
+        |f x - cosinePolynomial N a x| < ε := by
+  apply exists_cosinePolynomial_uniform_approx
+      hf_cont hf_periodic
+  · intro x
+    calc
+      f (-x) = f (-x + Real.pi) := (hf_periodic (-x)).symm
+      _ = f (Real.pi - x) := by
+        congr 1
+        ring
+      _ = f x := hf_reflection x
+  · exact hε
+
+lemma integrableOn_sinc_sq_mul_of_periodic
+    {f : ℝ → ℝ}
+    (hf_cont : Continuous f)
+    (hf_periodic : Function.Periodic f Real.pi) :
+    IntegrableOn
+      (fun x : ℝ => (Real.sinc x) ^ 2 * f x)
+      (Set.Ioi 0) := by
+  apply integrableOn_sinc_sq_mul hf_cont (bounded_of_continuous_periodic_pi hf_cont hf_periodic)
+
+lemma abs_integral_sinc_sq_mul_sub_le
+    {f g : ℝ → ℝ}
+    (hf_int :
+      IntegrableOn
+        (fun x : ℝ => (Real.sinc x) ^ 2 * f x)
+        (Set.Ioi 0))
+    (hg_int :
+      IntegrableOn
+        (fun x : ℝ => (Real.sinc x) ^ 2 * g x)
+        (Set.Ioi 0))
+    {ε : ℝ}
+    (hε : 0 ≤ ε)
+    (hfg : ∀ x : ℝ, |f x - g x| ≤ ε) :
+    |(∫ x in Set.Ioi 0,
+        (Real.sinc x) ^ 2 * f x) -
+      (∫ x in Set.Ioi 0,
+        (Real.sinc x) ^ 2 * g x)|
+      ≤ (Real.pi / 2) * ε := by
+  have hsub_int :
+    IntegrableOn (fun x : ℝ =>
+    (Real.sinc x) ^ 2 * f x - (Real.sinc x) ^ 2 * g x)
+    (Set.Ioi 0) := hf_int.sub hg_int
+  have hmajor_int :
+    IntegrableOn (fun x : ℝ => (Real.sinc x) ^ 2 * ε)
+    (Set.Ioi 0) :=integrable_sinc_sq.mul_const ε
+  rw [← integral_sub hf_int hg_int]
+  calc |∫ x in Set.Ioi 0,
+        ((Real.sinc x) ^ 2 * f x -
+         (Real.sinc x) ^ 2 * g x)|
+    ≤ ∫ x in Set.Ioi 0,
+        |(Real.sinc x) ^ 2 * f x -
+         (Real.sinc x) ^ 2 * g x| := by
+        exact abs_integral_le_integral_abs
+  _ ≤ ∫ x in Set.Ioi 0,(Real.sinc x) ^ 2 * ε := by
+        apply integral_mono_ae hsub_int.abs hmajor_int
+        filter_upwards with x
+        rw [← mul_sub, abs_mul, abs_sq ]
+        gcongr
+        exact hfg x
+  _ = (Real.pi / 2) * ε := by
+        rw [integral_mul_const]
+        rw [integral_sinc_sq_eq_pi_div_two]
+
+lemma abs_intervalIntegral_sub_le
+    {f g : ℝ → ℝ}
+    (hf_cont : Continuous f)
+    (hg_cont : Continuous g)
+    {ε : ℝ}
+    (hε : 0 ≤ ε)
+    (hfg : ∀ x : ℝ, |f x - g x| ≤ ε) :
+    |(∫ x in (0 : ℝ)..Real.pi / 2, f x) -
+      (∫ x in (0 : ℝ)..Real.pi / 2, g x)|
+      ≤ (Real.pi / 2) * ε := by
+  have hπ : (0 : ℝ) ≤ Real.pi / 2 := by
+    positivity
+
+  have hf_int :
+      IntervalIntegrable f volume 0 (Real.pi / 2) :=
+    hf_cont.intervalIntegrable 0 (Real.pi / 2)
+
+  have hg_int :
+      IntervalIntegrable g volume 0 (Real.pi / 2) :=
+    hg_cont.intervalIntegrable 0 (Real.pi / 2)
+
+  have hsub_int :
+      IntervalIntegrable
+        (fun x : ℝ => f x - g x)
+        volume 0 (Real.pi / 2) :=
+    hf_int.sub hg_int
+
+  rw [← intervalIntegral.integral_sub hf_int hg_int]
+
+  calc
+    |∫ x in (0 : ℝ)..Real.pi / 2, f x - g x|
+        ≤ ∫ x in (0 : ℝ)..Real.pi / 2,
+            |f x - g x| := by
+          exact
+            intervalIntegral.abs_integral_le_integral_abs hπ
+
+    _ ≤ ∫ _x in (0 : ℝ)..Real.pi / 2, ε := by
+          apply intervalIntegral.integral_mono_on
+            hπ
+            hsub_int.abs
+            intervalIntegrable_const
+          intro x hx
+          exact hfg x
+
+    _ = (Real.pi / 2) * ε := by
+          simp [smul_eq_mul]
+
+lemma lobachevsky_of_uniform_cosine_approx
+    {f : ℝ → ℝ}
+    (hf_cont : Continuous f)
+    (hf_int :
+      IntegrableOn
+        (fun x : ℝ => (Real.sinc x) ^ 2 * f x)
+        (Set.Ioi 0))
+    (happrox :
+      ∀ ε : ℝ, 0 < ε →
+        ∃ N : ℕ, ∃ a : ℕ → ℝ,
+          ∀ x : ℝ,
+            |f x - cosinePolynomial N a x| < ε) :
+    (∫ x in Set.Ioi 0,
+      (Real.sinc x) ^ 2 * f x)
+      =
+    ∫ x in (0 : ℝ)..Real.pi / 2, f x := by
+  let Lf : ℝ :=
+    ∫ x in Set.Ioi 0, (Real.sinc x) ^ 2 * f x
+  let Rf : ℝ :=
+    ∫ x in (0 : ℝ)..Real.pi / 2, f x
+  change Lf = Rf
+  by_contra hne
+  have hd_pos : 0 < |Lf - Rf| := by
+    exact abs_pos.mpr (sub_ne_zero.mpr hne)
+
+  let η : ℝ :=
+    |Lf - Rf| / (2 * Real.pi)
+  have hη : 0 < η := by
+    dsimp [η]
+    positivity
+  obtain ⟨N, a, ha⟩ := happrox η hη
+
+  let p : ℝ → ℝ := cosinePolynomial N a
+  have hp_cont : Continuous p := by
+    dsimp [p]
+    exact continuous_cosinePolynomial N a
+  have hp_int :IntegrableOn (fun x : ℝ => (Real.sinc x) ^ 2 * p x)
+        (Set.Ioi 0) := by
+    simpa [p] using
+    integrableOn_sinc_sq_mul_cosinePolynomial N a
+  have hfp : ∀ x : ℝ, |f x - p x| ≤ η := by
+    intro x
+    exact (by simpa [p] using (ha x).le)
+  have hpf : ∀ x : ℝ, |p x - f x| ≤ η := by
+    intro x
+    rw [abs_sub_comm]
+    exact hfp x
+
+  let Lp : ℝ :=
+    ∫ x in Set.Ioi 0, (Real.sinc x) ^ 2 * p x
+  let Rp : ℝ :=
+    ∫ x in (0 : ℝ)..Real.pi / 2, p x
+  have hp_eq : Lp = Rp := by
+    dsimp [Lp, Rp, p]
+    exact lobachevsky_cosinePolynomial N a
+  have hL : |Lf - Lp| ≤ (Real.pi / 2) * η := by
+    dsimp [Lf, Lp]
+    exact abs_integral_sinc_sq_mul_sub_le hf_int hp_int hη.le hfp
+  have hR : |Rp - Rf| ≤ (Real.pi / 2) * η := by
+    dsimp [Rp, Rf]
+    exact abs_intervalIntegral_sub_le hp_cont hf_cont hη.le hpf
+
+  have hbound :
+      |Lf - Rf| ≤ Real.pi * η := by
+    calc
+    |Lf - Rf| = |(Lf - Lp) + (Rp - Rf)| := by
+      congr 1
+      rw [hp_eq]
+      ring
+    _ ≤  |(Lf - Lp)| + |(Rp - Rf)| := by
+      exact abs_add_le _ _
+    _ ≤  (Real.pi / 2) * η + (Real.pi / 2) * η := by
+      exact add_le_add hL hR
+    _ =  Real.pi  * η := by
+      ring
+
+  have hη_value : Real.pi * η = |Lf - Rf| / 2 := by
+    dsimp [η]
+    field_simp
+
+  linarith
+
+/--
+Lobachevsky's integral formula for the square of `sinc`.
+
+If `f` is continuous, `π`-periodic, and symmetric under
+`x ↦ π - x`, then
+
+`∫₀^∞ sinc²(x) f(x) dx = ∫₀^{π/2} f(x) dx`.
+-/
+theorem lobachevsky_integral_formula
+    {f : ℝ → ℝ}
+    (hf_cont : Continuous f)
+    (hf_periodic : Function.Periodic f Real.pi)
+    (hf_reflection : ∀ x : ℝ, f (Real.pi - x) = f x) :
+    (∫ x in Set.Ioi 0,
+      (Real.sinc x) ^ 2 * f x)
+      =
+    ∫ x in (0 : ℝ)..Real.pi / 2, f x := by
+  have hf_bounded :
+      ∃ C : ℝ, 0 ≤ C ∧ ∀ x : ℝ, |f x| ≤ C :=
+    bounded_of_continuous_periodic_pi
+      hf_cont hf_periodic
+  have hf_int : IntegrableOn
+        (fun x : ℝ => (Real.sinc x) ^ 2 * f x)
+        (Set.Ioi 0) :=
+      integrableOn_sinc_sq_mul hf_cont hf_bounded
+  apply lobachevsky_of_uniform_cosine_approx hf_cont hf_int
+
+  intro ε hε
+  exact exists_cosinePolynomial_uniform_approx_of_reflection
+    hf_cont
+    hf_periodic
+    hf_reflection
+    hε
+
+end Lobachevsky
