@@ -676,6 +676,13 @@ SECTION 9 — Lobachevsky's integral formula
 /- We prove `∫₀^∞ (sinc x)^2 f(x)dx = ∫₀^π/2 f(x)dx`
     for a continuous function `π`-periodic function `f` satisfying
     the reflection symmetry  `f(π - x) = f(x)`.
+
+The proof has three steps:
+
+1. prove the identity for the Fourier modes `cos(2nx)`;
+2. extend it by linearity to finite cosine polynomials;
+3. approximate the original function uniformly by cosine polynomials and
+   pass to the limit.
 -/
 
 @[expose] public section
@@ -694,6 +701,13 @@ def cosinePolynomial
   ∑ n ∈ Finset.range (N + 1),
     a n * Real.cos (2 * (n : ℝ) * x)
 
+
+/--
+A finite cosine polynomial with frequencies `0, 2, 4, ..., 2N`.
+
+The frequency `2n` is chosen because `cos (2n(x + π)) = cos (2nx)`;
+therefore every such polynomial is `π`-periodic.
+-/
 lemma continuous_cosinePolynomial
     (N : ℕ) (a : ℕ → ℝ) :
     Continuous (cosinePolynomial N a) := by
@@ -779,6 +793,9 @@ lemma exists_mod_pi_mem_Ico (x : ℝ) :
       linarith [h3]
     linarith
 
+/--
+A continuous `π`-periodic real function is bounded on the whole real line.
+-/
 lemma bounded_of_continuous_periodic_pi
     (hf_cont : Continuous f)
     (hf_periodic : Function.Periodic f Real.pi) :
@@ -811,6 +828,10 @@ lemma even_cosinePolynomial
   intro x
   simp [cosinePolynomial]
 
+/--
+Multiplying `sinc²` by a continuous bounded function preserves
+integrability on `(0, ∞)`.
+-/
 lemma integrableOn_sinc_sq_mul
     (hf_cont : Continuous f)
     (hf_bounded : ∃ C : ℝ, 0 ≤ C ∧ ∀ x : ℝ, |f x| ≤ C) :
@@ -827,6 +848,9 @@ lemma integrableOn_sinc_sq_mul
     exact hC_bound x
   exact MeasureTheory.Integrable.mul_bdd integrable_sinc_sq hf_meas hf_bound_ae
 
+/--
+The product of `sinc²` with one cosine Fourier mode is integrable.
+-/
 lemma integrableOn_sinc_sq_mul_cos_two_nat (n : ℕ) :
     IntegrableOn
       (fun x : ℝ =>
@@ -873,6 +897,14 @@ lemma sinc_sq_mul_cos_two_nat_ae (n : ℕ) :
       _ = 1 - 2 * Real.sin x ^ 2 := by ring
   rw [h_cos_double]
   ring
+
+/--
+All nonconstant cosine modes are annihilated by integration against
+`sinc²` on `(0, ∞)`.
+
+The previous decomposition reduces the calculation to three known
+integrals. Their values cancel exactly when `n > 0`.
+-/
 
 lemma integral_sinc_sq_mul_cos_two_nat
     (n : ℕ) (hn : 0 < n) :
@@ -956,11 +988,6 @@ lemma intervalIntegral_cos_two_nat
   rw [harg, Real.sin_nat_mul_pi]
   simp
 
-lemma integral_sinc_sq_constant :
-    (∫ x in Set.Ioi 0, (Real.sinc x) ^ 2) =
-      Real.pi / 2 := by
-  exact integral_sinc_sq_eq_pi_div_two
-
 lemma intervalIntegral_one_zero_pi_div_two :
     (∫ x in (0 : ℝ)..Real.pi / 2, (1 : ℝ)) =
       Real.pi / 2 := by
@@ -977,6 +1004,12 @@ lemma intervalIntegral_one_zero_pi_div_two :
   rw [intervalIntegral.integral_eq_sub_of_hasDerivAt hint h_integrable]
   simp
 
+/--
+The product of `sinc²` with any finite cosine polynomial is integrable.
+
+This is an immediate application of continuity, periodic boundedness, and
+the general bounded-multiplier lemma above.
+-/
 lemma integrableOn_sinc_sq_mul_cosinePolynomial
     (N : ℕ) (a : ℕ → ℝ) :
     IntegrableOn
@@ -990,6 +1023,9 @@ lemma integrableOn_sinc_sq_mul_cosinePolynomial
       (continuous_cosinePolynomial N a)
       (periodic_cosinePolynomial N a)
 
+/--
+Lobachevsky's formula holds for every finite cosine polynomial.
+-/
 lemma lobachevsky_cosinePolynomial
     (N : ℕ) (a : ℕ → ℝ) :
     (∫ x in Set.Ioi 0,
@@ -999,6 +1035,9 @@ lemma lobachevsky_cosinePolynomial
     ∫ x in (0 : ℝ)..Real.pi / 2,
       cosinePolynomial N a x := by
   classical
+
+  -- First prove the formula separately for each cosine mode
+  -- `x ↦ cos (2 n x)`.
   have hmode (n : ℕ) :
       (∫ x in Set.Ioi 0,
         (Real.sinc x) ^ 2 *
@@ -1012,6 +1051,9 @@ lemma lobachevsky_cosinePolynomial
     · have hn : 0 < n := Nat.pos_of_ne_zero hn0
       rw [integral_sinc_sq_mul_cos_two_nat n hn,
           intervalIntegral_cos_two_nat n hn]
+
+  -- We will interchange the finite sum and the improper integral.
+  -- For this, every weighted cosine mode must be integrable.
   have hmode_integrable (n : ℕ) :
       IntegrableOn
         (fun x : ℝ =>
@@ -1024,8 +1066,12 @@ lemma lobachevsky_cosinePolynomial
       intro x
       exact abs_cos_le_one _
   unfold cosinePolynomial
+  -- Distribute the factor `sinc²(x)` over the finite sum.
   simp_rw [Finset.mul_sum]
+  -- Interchange the finite sum with the improper integral on `(0, ∞)`.
   rw [MeasureTheory.integral_finset_sum]
+
+  -- Interchange the same finite sum with the interval integral.
   · rw [intervalIntegral.integral_finset_sum]
     · apply Finset.sum_congr rfl
       intro n hn_mem
@@ -1051,6 +1097,8 @@ lemma lobachevsky_cosinePolynomial
           ∫ x in (0 : ℝ)..Real.pi / 2,
             a n * Real.cos (2 * (n : ℝ) * x) := by
               rw [intervalIntegral.integral_const_mul]
+
+    -- Each summand on `[0, π/2]` is interval integrable
     · intro n hn_mem
       exact(by
           fun_prop :
@@ -1058,6 +1106,8 @@ lemma lobachevsky_cosinePolynomial
             (fun x : ℝ =>
               a n * Real.cos (2 * (n : ℝ) * x))
         ).intervalIntegrable _ _
+
+   -- Each summand in the improper integral is integrable.
   ·intro n hn_mem
    have h := (hmode_integrable n).const_mul (a n)
    simpa [mul_assoc, mul_left_comm, mul_comm] using h
@@ -1079,20 +1129,46 @@ lemma even_of_periodic_of_reflection
       ring
     _ = f x :=  hf_periodic x
 
+/-!
+## From periodic functions on `ℝ` to functions on a circle
+
+`AddCircle T` is the real line in which two numbers are identified when
+their difference is an integer multiple of `T`. In mathematical notation,
+
+`AddCircle T = ℝ / (Tℤ)`.
+
+Thus, in `AddCircle π`, the real numbers `x`, `x + π`, `x - π`,
+and more generally `x + nπ`, represent the same point.
+-/
+
 private lemma fourier_pi_apply
     (k : ℤ) (x : ℝ) :
     (fourier (T := Real.pi) k)
         (x : AddCircle Real.pi) =
       Complex.exp
         (((2 * (k : ℝ) * x : ℝ) : ℂ) * Complex.I) := by
+  -- Mathlib first expresses the Fourier character with the general
+  -- phase `2πkx / T`. Here the circumference is `T = π`.
   rw [fourier_coe_apply]
+  -- it is enough to prove that their complex exponents are equal.
   apply congrArg Complex.exp
   apply Complex.ext
+  -- The real parts of the two exponents agree.
   · push_cast
     field_simp [Real.pi_ne_zero]
+  -- Their imaginary parts agree as well.
   · push_cast
     field_simp [Real.pi_ne_zero]
 
+
+/--
+Consider one Fourier term with coefficient `z`.
+
+We take its real part at `x` and at `-x`, then average the two values.
+The sine terms cancel, leaving only
+
+`z.re * cos (2 * k * x)`.
+-/
 private lemma fourier_pi_symmetrized_term
     (k : ℤ) (z : ℂ) (x : ℝ) :
     (((z • fourier (T := Real.pi) k)
@@ -1104,12 +1180,18 @@ private lemma fourier_pi_symmetrized_term
   simp only [ContinuousMap.smul_apply]
   simp only [smul_eq_mul]
 
+   -- Replace the abstract Fourier character at `x` by `exp(2ikx)`.
   rw [fourier_pi_apply k x]
+
+  -- Perform the same replacement at the opposite point `-x`.
   have hfourier_neg :
     (fourier (T := Real.pi) k) (-(x : AddCircle Real.pi))
     = Complex.exp (((2 * (k : ℝ) * (-x) : ℝ) : ℂ) * Complex.I) := by
     simpa using fourier_pi_apply k (-x)
   rw [hfourier_neg]
+
+  -- Expand the real part of the complex products and use
+  -- `exp(iθ) = cos θ + i sin θ`.
   simp only [
     Complex.mul_re,
     Complex.exp_ofReal_mul_I_re,
@@ -1121,6 +1203,10 @@ private lemma fourier_pi_symmetrized_term
   rw [Real.cos_neg, Real.sin_neg]
   ring
 
+/--
+Replacing an integer frequency `k` by its natural absolute value
+does not change the corresponding cosine mode.
+-/
 private lemma cosine_natAbs
     (k : ℤ) (x : ℝ) :
     Real.cos (2 * (k.natAbs : ℝ) * x) =
@@ -1136,6 +1222,18 @@ private lemma cosine_natAbs
             ring]
       simp [Real.cos_neg]
 
+  -- Construct the cosine coefficients from the Fourier coefficients.
+  -- The Fourier polynomial encoded by `d` is
+  --   Q(x) = ∑ k : ℤ, dₖ * exp (2 * k * x * i).
+  -- We want to describe its even real part:
+
+  --   (Re(Q(x)) + Re(Q(-x))) / 2 = ∑ k : ℤ, Re(dₖ) * cos (2 * k * x).
+  --   cₙ = ∑ k : ℤ, k.natAbs = n, Re(dₖ).
+  --
+  -- Equivalently,
+  --
+  --   c₀ = Re(d₀),
+  --   cₙ = Re(dₙ) + Re(d₋ₙ)    for n > 0.
 lemma finsupp_fourier_symmetrization
     (d : ℤ →₀ ℂ) :
     ∃ c : ℕ →₀ ℝ,
@@ -1164,10 +1262,17 @@ lemma finsupp_fourier_symmetrization
 
   dsimp only [c]
 
+  -- Prove the identity by linear induction on the finitely supported
+  -- Fourier coefficient family.
   induction d using Finsupp.induction_linear with
+
+  -- The zero coefficient family represents the zero function on both
+  -- sides.
   | zero =>
       simp
 
+  -- In the addition case, prove that the coefficient construction,
+  -- the cosine evaluation, and the Fourier evaluation are all additive.
   | add d₁ d₂ hd₁ hd₂ =>
       have h_coeff :(d₁ + d₂).sum
                 (fun k z => Finsupp.single k.natAbs z.re)
@@ -1183,6 +1288,8 @@ lemma finsupp_fourier_symmetrization
             intro k z₁ z₂
             simp [Complex.add_re])
 
+      -- Evaluating the resulting cosine coefficient family is also
+      -- additive.
       have h_sum : (((d₁ + d₂).sum
                   (fun k z => Finsupp.single k.natAbs z.re)).sum
                   (fun n b => b * Real.cos (2 * (n : ℝ) * x)))
@@ -1223,7 +1330,10 @@ lemma finsupp_fourier_symmetrization
       ]
       ring
 
+  -- It remains to prove the identity for one Fourier coefficient.
   | single k z =>
+      -- Both finitely supported sums reduce to their unique nonzero
+      -- term.
       simp only [
         Finsupp.sum_single_index,
         Complex.zero_re,
@@ -1233,6 +1343,8 @@ lemma finsupp_fourier_symmetrization
         ContinuousMap.smul_apply
       ]
 
+      -- Replace the natural frequency `|k|` by the integer frequency
+      -- `k`, then apply the one-frequency symmetrization identity.
       rw [cosine_natAbs k x]
       exact
         (fourier_pi_symmetrized_term k z x).symm
@@ -1248,12 +1360,25 @@ lemma exists_finsupp_cosine_uniform_approx
       c.sum (fun n b => b * Real.cos (2 * (n : ℝ) * x))|
        < ε := by
   classical
+  -- The Fourier theory of `AddCircle T` requires the period `T` to be
+  -- positive.
   letI : Fact (0 < Real.pi) := ⟨Real.pi_pos⟩
+
+  -- The two endpoints of the fundamental interval represent the same point
   have hendpoint : f 0 = f Real.pi := by
     simpa using (hf_periodic 0).symm
-  /-
+
+   /-
   The continuous function induced by `f` on `AddCircle π`.
   -/
+
+  -- A `π`-periodic function on `ℝ` can be regarded as a function on the
+  -- quotient circle `AddCircle π`.
+  --
+  -- `liftIco` chooses the representative in `[0, π)`. The endpoint
+  -- equality proved above ensures continuity where `0` and `π` are
+  -- identified. We use complex values because Mathlib's Fourier density
+  -- theorem is formulated over `ℂ`.
   let F : C(AddCircle Real.pi, ℂ) :=
     {
       toFun :=
@@ -1270,10 +1395,15 @@ lemma exists_finsupp_cosine_uniform_approx
   -/
   have hF_apply (x : ℝ) :
       F (x : AddCircle Real.pi) = (f x : ℂ) := by
+
+    -- Choose the representative `y` of `x` in the fundamental interval
+    -- `[0, π)`.
     obtain ⟨n, hn⟩ := exists_mod_pi_mem_Ico x
     let y : ℝ := x - (n : ℝ) * Real.pi
     have hy : y ∈ Set.Ico (0 : ℝ) Real.pi := by
       exact hn
+
+    -- The real numbers `x` and `y = x - nπ` represent the same point of the quotient circle
     have hcoe : (y : AddCircle Real.pi) =
                 (x : AddCircle Real.pi) := by
       dsimp [y]
@@ -1281,6 +1411,8 @@ lemma exists_finsupp_cosine_uniform_approx
       rw [AddCircle.coe_zsmul Real.pi]
       rw [AddCircle.coe_period Real.pi]
       simp
+
+    -- Periodicity also guarantees that `f y = f x`.
     have hperiodic : f y = f x := by
       symm
       convert
@@ -1289,6 +1421,9 @@ lemma exists_finsupp_cosine_uniform_approx
         using 1
       · dsimp [y]
         ring
+
+    -- Evaluate the lifted function using the representative `y`, then
+    -- return to the original value at `x`.
     calc
       F (x : AddCircle Real.pi)
           = F (y : AddCircle Real.pi) := by
@@ -1304,12 +1439,18 @@ lemma exists_finsupp_cosine_uniform_approx
   The finite Fourier span is dense in
   `C(AddCircle π, ℂ)`.
   -/
+
+  -- Let `S` be the space of all finite complex linear combinations of
+  -- Fourier characters. Its elements are complex trigonometric
+  -- polynomials on the circle.
   let S : Submodule ℂ C(AddCircle Real.pi, ℂ) :=
     Submodule.span ℂ
       (Set.range
         (fourier :
           ℤ → C(AddCircle Real.pi, ℂ)))
 
+  -- The Fourier density theorem says that every continuous function on
+  -- the circle is a uniform limit of elements of `S`.
   have hS_dense : Dense (S : Set C(AddCircle Real.pi, ℂ)) := by
     apply
       (Submodule.dense_iff_topologicalClosure_eq_top).2
@@ -1317,10 +1458,19 @@ lemma exists_finsupp_cosine_uniform_approx
       (span_fourier_closure_eq_top
         (T := Real.pi))
 
+  -- Choose a Fourier polynomial `P` whose uniform distance from `F` is
+  -- less than `ε`.
   obtain ⟨P, hPmem, hFP⟩ := hS_dense.exists_dist_lt F hε
+
+  -- Since `P` belongs to the algebraic Fourier span, it is represented
+  -- by a finitely supported family of coefficients `d : ℤ →₀ ℂ`
   obtain ⟨d, hd⟩ := Finsupp.mem_span_range_iff_exists_finsupp.mp hPmem
+  -- Write the corresponding Fourier polynomial explicitly.
   let Q : C(AddCircle Real.pi, ℂ) :=
     d.sum (fun k z => z • fourier (T := Real.pi) k)
+
+  -- The explicit polynomial `Q` is the element `P` chosen by density,
+  -- and hence is uniformly close to `F`.
   have hFQ : dist F Q < ε := by
     have hQP : Q = P := by
       exact hd
@@ -1339,10 +1489,14 @@ lemma exists_finsupp_cosine_uniform_approx
           (F - Q) z
       _ < ε := hnorm
 
+  -- Symmetrize the real part of `Q` and rewrite it as a finitely
+  -- supported cosine sum.
   obtain ⟨c, hc⟩ := finsupp_fourier_symmetrization d
   refine ⟨c, ?_⟩
   intro x
 
+  -- The real part of `Q(x)` approximates the real value `f(x)`.
+  -- This follows from `|Re z| ≤ ‖z‖`.
   have hxerr :
       |f x -
         (Q (x : AddCircle Real.pi)).re| < ε := by
@@ -1358,6 +1512,8 @@ lemma exists_finsupp_cosine_uniform_approx
     have hp := hpointwise (x : AddCircle Real.pi)
     exact lt_of_le_of_lt hre' hp
 
+  -- Apply the same pointwise estimate at `-x`. Since `f` is even,
+  -- `f(-x)` is again equal to the target value `f(x)`.
   have hnegerr :
       |f x -(Q (-x : AddCircle Real.pi)).re| < ε := by
     have hre := Complex.abs_re_le_norm
@@ -1382,9 +1538,13 @@ lemma exists_finsupp_cosine_uniform_approx
     simpa [hf_even x] using hraw
 
   rw [hc x]
+
+  -- The cosine polynomial constructed by `hc` is the average of
+  -- `Re Q(x)` and `Re Q(-x)
   let A : ℝ := (Q (x : AddCircle Real.pi)).re
   let B : ℝ := (Q (-x : AddCircle Real.pi)).re
   change |f x - (A + B) / 2| < ε
+
   calc |f x - (A + B) / 2| =
   |((f x - A) + (f x - B)) / 2| := by
         congr 1
@@ -1401,6 +1561,13 @@ lemma exists_finsupp_cosine_uniform_approx
         exact add_lt_add hxerr hnegerr
   _ =ε := by simp
 
+/--
+Uniformly approximates a continuous, `π`-periodic function satisfying
+the reflection symmetry `f (π - x) = f x` by cosine polynomials.
+
+Periodicity and reflection symmetry first imply that `f` is even.
+The general cosine approximation theorem can then be applied.
+-/
 lemma exists_cosinePolynomial_uniform_approx
     {f : ℝ → ℝ}
     (hf_cont : Continuous f)
@@ -1451,6 +1618,9 @@ lemma exists_cosinePolynomial_uniform_approx_of_reflection
     ∃ N : ℕ, ∃ a : ℕ → ℝ,
       ∀ x : ℝ,
         |f x - cosinePolynomial N a x| < ε := by
+
+  -- Start with the finitely supported cosine approximation constructed
+  -- from Fourier density.
   apply exists_cosinePolynomial_uniform_approx
       hf_cont hf_periodic
   · intro x
@@ -1462,6 +1632,8 @@ lemma exists_cosinePolynomial_uniform_approx_of_reflection
       _ = f x := hf_reflection x
   · exact hε
 
+ -- A continuous periodic function is bounded, so multiplication by it
+  -- preserves the integrability of `sinc²`.
 lemma integrableOn_sinc_sq_mul_of_periodic
     {f : ℝ → ℝ}
     (hf_cont : Continuous f)
@@ -1561,6 +1733,11 @@ lemma abs_intervalIntegral_sub_le
     _ = (Real.pi / 2) * ε := by
           simp [smul_eq_mul]
 
+
+/--
+Extends Lobachevsky's identity from cosine polynomials to any continuous
+function that can be uniformly approximated by cosine polynomials.
+-/
 lemma lobachevsky_of_uniform_cosine_approx
     {f : ℝ → ℝ}
     (hf_cont : Continuous f)
@@ -1582,15 +1759,24 @@ lemma lobachevsky_of_uniform_cosine_approx
   let Rf : ℝ :=
     ∫ x in (0 : ℝ)..Real.pi / 2, f x
   change Lf = Rf
+
+   -- Assume that the two integrals are different and derive a
+  -- contradiction from uniform approximation.
   by_contra hne
+
+
   have hd_pos : 0 < |Lf - Rf| := by
     exact abs_pos.mpr (sub_ne_zero.mpr hne)
 
+  -- Choose the approximation error so that `π η` is exactly half of
+  -- the alleged positive difference.
   let η : ℝ :=
     |Lf - Rf| / (2 * Real.pi)
   have hη : 0 < η := by
     dsimp [η]
     positivity
+
+  -- Choose a cosine polynomial approximating `f` uniformly within `η`.
   obtain ⟨N, a, ha⟩ := happrox η hη
 
   let p : ℝ → ℝ := cosinePolynomial N a
@@ -1609,10 +1795,14 @@ lemma lobachevsky_of_uniform_cosine_approx
     rw [abs_sub_comm]
     exact hfp x
 
+  -- Define the two integrals evaluated at the approximating polynomial.
   let Lp : ℝ :=
     ∫ x in Set.Ioi 0, (Real.sinc x) ^ 2 * p x
   let Rp : ℝ :=
     ∫ x in (0 : ℝ)..Real.pi / 2, p x
+
+  -- Lobachevsky's identity has already been proved for every cosine
+  -- polynomial.
   have hp_eq : Lp = Rp := by
     dsimp [Lp, Rp, p]
     exact lobachevsky_cosinePolynomial N a
@@ -1650,6 +1840,14 @@ If `f` is continuous, `π`-periodic, and symmetric under
 `x ↦ π - x`, then
 
 `∫₀^∞ sinc²(x) f(x) dx = ∫₀^{π/2} f(x) dx`.
+
+The proof has three main ingredients:
+
+1. periodicity and reflection symmetry imply that `f` is even;
+2. such a function can be uniformly approximated by finite cosine
+   polynomials using Fourier approximation on `AddCircle π`;
+3. Lobachevsky's identity is known for cosine polynomials and passes
+   to the uniform limit through the two integral estimates.
 -/
 theorem lobachevsky_integral_formula
     {f : ℝ → ℝ}
