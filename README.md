@@ -1,54 +1,41 @@
-# Formalization of the Laplace Transform in Lean 4
+# Dirichlet Integral and Lobachevsky's Formula in Lean 4
 
-This repository contains a formalization of the Laplace Transform, its operational properties, and its analytical inversion formula using the **Lean 4** proof assistant and **Mathlib**.
+Lean 4 formalization of the Dirichlet integral, its classical applications, and Lobachevsky's integral formula.
 
-The formalization spans Banach space measure theory, complex contour integration, and the explicit evaluation of the Dirichlet integral.
+## Contents
+
+The project includes:
+
+- the formalization of the Dirichlet integral;
+- the Dirichlet cutoff and its convergence to the Heaviside function;
+- quadratic trigonometric integral identities;
+- Lobachevsky's integral formula;
+
+## Dependencies
+
+This project uses [Lean 4](https://lean-lang.org/) and [Mathlib](https://github.com/leanprover-community/mathlib4).
 
 ## Project Report
 
 A detailed mathematical report explaining the proof architecture, intermediate lemmas, and formalization methodology can be found here:
 
-📄 **[laplace_transform_lean_project.pdf](./laplace_transform/docs/laplace_transform_lean_project.pdf)**
+📄 [Dirichlet_integral.pdf](https://github.com/antoine-vinciguerra/lean_project/blob/main/Dirichlet%20Integral/docs/Dirichlet_integral.pdf)
 
----
+## Project Structure
 
-## Repository Structure
+Dirichlet Integral/
+├── DirichletIntegral.lean
+├── DirichletIntegralApplications.lean
+└── LobachevskyFormula.lean
 
-The source code is structured into four main Lean files:
+`DirichletIntegral.lean` contains the formal proof of the Dirichlet integral and the evaluation of the squared sinc integral.
 
-* **`LaplaceTransformDef.lean`**
-    Defines the generalized version of the Laplace transform (`GeneralizedLaplaceTransform`) for functions taking values in a complete normed ring / Banach space. It establishes structural properties such as linearity, additivity, and scalar commutation.
-  * **`RealLaplaceTransform.lean`**
-    Focuses on the classical Laplace transform for real-domain functions mapping to the complex plane and establishes the main inversion theorem (`IsInverseLaplace`). It bridges the complex contour line integration with the Dirichlet integral limits to recover the original function $f(t)$ from its transform.
-* **`DirichletIntegral.lean`**
-    Provides a standalone, rigorous proof of the Dirichlet integral (the improper integral of the sinc function from $0$ to $+\infty$ equals $\pi/2$). 
-* **`LaplaceTransformProperties.lean`**
-   It formalizes both truncated (`finiteLaplaceTransform`) and improper integrals, computes standard transforms ($1$, $t$, $e^{at}$), implements integration by parts (IBP), and proves the derivative operational theorem.
+`DirichletIntegralApplications.lean` develops consequences of the Dirichlet integral, including the Dirichlet cutoff, the Heaviside convergence theorem, and several trigonometric integral identities.
 
+`LobachevskyFormula.lean` contains the formalization of Lobachevsky's integral formula using Fourier approximation on the additive circle.
 
----
+## License
 
-## Key Formalized Theorems
+Add the license for this repository here.
 
-### 1. Standard Transforms
-* **Constant function**: $\mathcal{L}\{1\} = \frac{1}{s}$ (for $\text{Re}(s) > 0$)
-* **Identity function**: $\mathcal{L}\{t\} = \frac{1}{s^2}$
-* **Exponential function**: $\mathcal{L}\{e^{at}\} = \frac{1}{s-a}$
-
-### 2. Operational Calculi
-* **First Derivative**: $\mathcal{L}\{f'\} = s\mathcal{L}\{f\} - f(0)$
-* **Higher-order Derivatives**: Generalization to the $n$-th iterated derivative using induction (`finite_laplace_iteratedDeriv_eq`).
-
-### 3. Asymptotics & Limits
-* **Dirichlet Evaluation**: Formal proof that $\int_{0}^{+\infty} \text{sinc}^2(t) \, dt = \frac{\pi}{2}$ and its extension to the improper limit of $\int_{0}^{+\infty}\text{sinc}(t)$.
-
-### 4. Analytical Inversion
-* **`IsInverseLaplace`**: Proves that under appropriate differentiability and exponential decay conditions, the Bromwich contour integral accurately recovers $f(t)$ almost everywhere.
-
-## How to Verify and Compile the Project
-
-This project is fully compatible with the standard Lean 4 toolchain. To fetch the pre-compiled Mathlib binaries matching this project's version and verify all proofs locally, open your terminal at the root of the repository and run:
-
-```bash
-lake exe cache get
-lake build
+Note that your license applies only to material for which you hold the necessary rights. Code adapted from another repository remains subject to the rights and licensing terms of its original authors.
