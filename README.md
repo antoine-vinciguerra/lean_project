@@ -22,11 +22,12 @@ A detailed mathematical report explaining the proof architecture, intermediate l
 📄 [Dirichlet_integral.pdf](https://github.com/antoine-vinciguerra/lean_project/blob/main/Dirichlet%20Integral/docs/Dirichlet_integral.pdf)
 
 ## Project Structure
-
+```text
 Dirichlet Integral/
 ├── DirichletIntegral.lean
 ├── DirichletIntegralApplications.lean
 └── LobachevskyFormula.lean
+```
 
 `DirichletIntegral.lean` contains the formal proof of the Dirichlet integral and the evaluation of the squared sinc integral.
 
